@@ -134,6 +134,18 @@ def fiche(prenom, nom):
     return send_file(path, as_attachment=True)
 
 def send_confirmation_email(data):
+
+    html_email_content = \"\"\"
+    <html>
+      <body>
+        <p>Bonjour {prenom},</p>
+        <p>Nous vous confirmons la bonne réception de votre dossier. L’équipe d’Intégrale Academy vous remercie.</p>
+        <p>Nous restons disponibles pour toute question complémentaire.</p>
+        <br>
+        <p>Cordialement,<br>L’équipe Intégrale Academy</p>
+      </body>
+    </html>
+    \"\"\"
     msg = MIMEMultipart('alternative')
     msg['Subject'] = "Confirmation de dépôt de dossier – Intégrale Academy"
     msg['From'] = os.environ.get("MAIL_USER")
