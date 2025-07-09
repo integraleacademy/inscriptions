@@ -104,4 +104,33 @@ def send_confirmation_email(data):
 
     text = f"""Bonjour {data['prenom']},
 
-Votre inscription a bien été prise e
+Votre inscription a bien été prise en compte.
+
+L’équipe Intégrale Academy"""
+
+    html_email_content = """
+<html>
+<body style='font-family: Arial, sans-serif; color: #333;'>
+  <div style='max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;'>
+    <div style='text-align: center;'>
+      <img src='https://integraleacademy.com/wp-content/uploads/2023/11/cropped-integrale-academy-blanc.png' alt='Logo' style='max-height: 80px;'>
+    </div>
+    <p>Bonjour <strong>{prenom}</strong>,</p>
+    <p>Votre inscription a bien été prise en compte.</p>
+    <p style='margin-top: 30px;'>Merci pour votre confiance,<br>L’équipe <strong>Intégrale Academy</strong></p>
+  </div>
+</body>
+</html>
+"""
+
+    html = html_email_content.replace('{prenom}', data['prenom'])
+
+    msg.attach(MIMEText(text, 'plain'))
+    msg.attach(MIMEText(html, 'html'))
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
+        server.sendmail(msg['From'], [msg['To']], msg.as_string())
+
+if __name__ == '__main__':
+    app.run(debug=True)
