@@ -23,7 +23,7 @@ def save_data(entry):
     if not os.path.exists(DATA_FILE):
         data = []
     else:
-        with open(DATA_FILE, ' 'r') as f:
+        with open(DATA_FILE, 'r') as f:
             data = json.load(f)
     data.append(entry)
     with open(DATA_FILE, 'w') as f:
