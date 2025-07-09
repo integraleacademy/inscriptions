@@ -1,0 +1,210 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Inscription - Intégrale Academy</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #fef9f1;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 800px;
+      margin: 40px auto;
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.1);
+    }
+    h1, h2 {
+      color: #222;
+      text-align: center;
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    input, select {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    button {
+      margin-top: 20px;
+      width: 100%;
+      padding: 12px;
+      background-color: #F4C45A;
+      border: none;
+      color: #000;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    header {
+      text-align: center;
+      margin-top: 30px;
+    }
+    header img {
+      height: 80px;
+    }
+    .example-cnaps {
+      text-align: center;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div style="text-align: center; margin-bottom: 20px;"><img src="/static/logo.png" alt="Logo Intégrale Academy" style="max-width: 200px; width: 100%; height: auto;"></div>
+  </header>
+  <div class="container">
+    <h1>Inscription à la formation</h1>
+    <form action="/submit" method="post" enctype="multipart/form-data">
+      <h2>Étape 1 : Informations personnelles</h2>
+      <label>Nom : <input type="text" name="nom" required></label>
+      <label>Prénom : <input type="text" name="prenom" required></label>
+      <label>Email : <input type="email" name="email" required></label>
+      <label>Numéro de sécurité sociale : <input type="text" name="secu" pattern="[0-9]{15}" required></label>
+      <label>Date de naissance : <input type="date" name="naissance" required></label>
+      <label>Ville de naissance : <input type="text" name="ville_naissance" required></label>
+      <label>Pays de naissance : <input type="text" name="pays_naissance" required></label>
+      <label>Nationalité : <input type="text" name="nationalite" required></label>
+      <label>Sexe :
+        <select name="sexe" required>
+          <option value="Homme">Homme</option>
+          <option value="Femme">Femme</option>
+        </select>
+      </label>
+      <label>Adresse postale : <input type="text" name="adresse" required></label>
+      <label>Code postal : <input type="text" name="cp" required></label>
+      <label>Ville : <input type="text" name="ville" required></label>
+
+      <h2>Étape 2 : Autorisation préalable CNAPS</h2>
+      <label>Numéro CNAPS :
+        <input type="text" name="cnaps" pattern="(PRE|CAR)-\d{3}-\d{4}-\d{2}-\d{2}-\d{11}" required>
+      </label>
+      <div class="example-cnaps">
+        <img src="/static/carte_pro.png" alt="Exemple CNAPS" style="width: 60%; max-width: 400px;">
+      </div>
+
+      <h2>Étape 3 : Documents</h2>
+      <label>Photo d'identité : <input type="file" name="photo_identite" required></label>
+      <label>Carte Vitale : <input type="file" name="carte_vitale" required></label>
+      <label>Carte d'identité / Passeport : <input type="file" name="piece_identite" multiple required></label>
+
+      <button type="submit">Envoyer le dossier</button>
+    </form>
+  </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const secuInput = document.querySelector('input[name="secu"]');
+  const cnapsInput = document.querySelector('input[name="cnaps"]');
+
+  if (secuInput) {
+    secuInput.addEventListener('input', function () {
+      let val = this.value.replace(/\D/g, '').substring(0, 15);
+      let formatted = val.match(/.{1,3}/g);
+      this.value = formatted ? formatted.join(' ') : '';
+    });
+  }
+
+  if (cnapsInput) {
+    cnapsInput.addEventListener('input', function () {
+      let val = this.value.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+      val = val.replace(/^PRE|^CAR/, (m) => m + '-');
+      if (val.startsWith('PRE-') || val.startsWith('CAR-')) {
+        val = val.replace(/^(.{4})(.{3})(.{4})(.{2})(.{2})(.{11}).*/, "$1$2-$3-$4-$5-$6");
+      }
+      this.value = val;
+    });
+  }
+});
+</script>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const secuInput = document.querySelector('input[name="secu"]');
+  const cnapsInput = document.querySelector('input[name="cnaps"]');
+
+  function addCheck(input) {
+    if (!input.nextElementSibling || !input.nextElementSibling.classList.contains('checkmark')) {
+      const span = document.createElement('span');
+      span.textContent = '✅';
+      span.classList.add('checkmark');
+      span.style.marginLeft = '10px';
+      span.style.fontSize = '16px';
+      input.parentNode.appendChild(span);
+    }
+  }
+
+  function removeCheck(input) {
+    if (input.nextElementSibling && input.nextElementSibling.classList.contains('checkmark')) {
+      input.nextElementSibling.remove();
+    }
+  }
+
+  if (secuInput) {
+    secuInput.addEventListener('input', function () {
+      let val = this.value.replace(/\D/g, '').substring(0, 15);
+      let formatted = '';
+      if (val.length <= 13) {
+        formatted = val.replace(/(\d{1,3})(\d{0,3})?(\d{0,3})?(\d{0,4})?/, function(_, a, b, c, d) {
+          return [a, b, c, d].filter(Boolean).join(' ');
+        });
+      } else {
+        formatted = val.replace(/(\d{3})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1 $2 $3 $4 $5");
+      }
+      this.value = formatted;
+      val.length === 15 ? addCheck(this) : removeCheck(this);
+    });
+  }
+
+  if (cnapsInput) {
+    cnapsInput.addEventListener('input', function () {
+      let val = this.value.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+      val = val.replace(/^PRE|^CAR/, (m) => m + '-');
+      if (val.startsWith('PRE-') || val.startsWith('CAR-')) {
+        val = val.replace(/^(.{4})(.{3})(.{4})(.{2})(.{2})(.{11}).*/, "$1$2-$3-$4-$5-$6");
+      }
+      this.value = val;
+      const cnapsRegex = /^(PRE|CAR)-\d{3}-\d{4}-\d{2}-\d{2}-\d{11}$/;
+      cnapsRegex.test(this.value) ? addCheck(this) : removeCheck(this);
+    });
+  }
+});
+</script>
+
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const cnapsInput = document.querySelector('input[name="numero_cnaps"]');
+    const secuInput = document.querySelector('input[name="securite_sociale"]');
+
+    cnapsInput.addEventListener('input', function () {
+        let val = this.value.replace(/[^0-9A-Z]/gi, '').toUpperCase();
+        if (val.startsWith('PRE') || val.startsWith('CAR')) {
+            val = val.replace(/[^0-9]/g, '');
+            if (val.length > 18) val = val.slice(0, 18);
+            this.value = (this.value.startsWith('PRE') ? 'PRE' : 'CAR') + '-' +
+                         val.slice(0, 3) + '-' + val.slice(3, 7) + '-' + val.slice(7, 9) + '-' +
+                         val.slice(9, 11) + '-' + val.slice(11);
+        }
+    });
+
+    secuInput.addEventListener('input', function () {
+        this.value = this.value.replace(/[^0-9]/g, '').slice(0, 15);
+    });
+});
+</script>
+
+</body>
+</html>
