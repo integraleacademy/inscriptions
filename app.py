@@ -135,7 +135,7 @@ def fiche(prenom, nom):
 
 def send_confirmation_email(data):
 
-    html_email_content = \"\"\"
+    html_email_content = """
     <html>
       <body>
         <p>Bonjour {prenom},</p>
@@ -145,7 +145,7 @@ def send_confirmation_email(data):
         <p>Cordialement,<br>L’équipe Intégrale Academy</p>
       </body>
     </html>
-    \"\"\"
+    """
     msg = MIMEMultipart('alternative')
     msg['Subject'] = "Confirmation de dépôt de dossier – Intégrale Academy"
     msg['From'] = os.environ.get("MAIL_USER")
