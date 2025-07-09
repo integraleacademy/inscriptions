@@ -134,11 +134,33 @@ def fiche(prenom, nom):
     return send_file(path, as_attachment=True)
 
 def send_confirmation_email(data):
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
     msg = MIMEMultipart('alternative')
-    msg['Subject'] = "Confirmation de dépôt de dossier – Intégrale Academy"
-    msg['From'] = os.environ.get("MAIL_USER")
+    msg['Subject'] = 'Confirmation d’inscription – Intégrale Academy'
+    msg['From'] = os.environ.get('MAIL_USER')
     msg['To'] = data['email']
-    html_email_content = """
+    text = f"Bonjour {data['prenom']},\n\nVotre inscription a bien été prise en compte.\n\nL’équipe Intégrale Academy"
+    html = f"""
+<html>
+  <body style='font-family: Arial, sans-serif; color: #333;'>
+    <div style='max-width: 600px; margin: auto; border: 1px solid #ccc; padding: 20px; border-radius: 10px;'>
+      <div style='text-align: center;'>
+        <img src='https://integraleacademy.com/wp-content/uploads/2023/11/cropped-integrale-academy-blanc.png' style='max-height: 80px;' />
+      </div>
+      <p>Bonjour <strong>{data['prenom']}</strong>,</p>
+      <p>Votre inscription a bien été prise en compte.</p>
+      <p style='margin-top: 30px;'>Merci pour votre confiance,<br>L’équipe <strong>Intégrale Academy</strong></p>
+    </div>
+  </body>
+</html>
+"""
+    msg.attach(MIMEText(text, 'plain'))
+    msg.attach(MIMEText(html, 'html'))
+    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+        server.login(os.environ.get('MAIL_USER'), os.environ.get('MAIL_PASS'))
+        server.sendmail(msg['From'], [msg['To']], msg.as_string())
 <html>
 <body>
   <p>Bonjour {prenom},</p>
