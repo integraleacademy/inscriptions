@@ -1,4 +1,3 @@
-
 from flask import Flask, render_template, request, redirect, send_file, session, url_for
 import os, json, zipfile
 from werkzeug.utils import secure_filename
@@ -134,7 +133,6 @@ def fiche(prenom, nom):
     return send_file(path, as_attachment=True)
 
 def send_confirmation_email(data):
-
     html_email_content = """
     <html>
       <body>
@@ -156,7 +154,6 @@ def send_confirmation_email(data):
         server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
         server.sendmail(msg['From'], [msg['To']], msg.as_string())
 
-
 @app.route('/update/<prenom>/<nom>', methods=['POST'])
 def update(prenom, nom):
     if not session.get('admin'):
@@ -177,7 +174,6 @@ def update(prenom, nom):
         json.dump(data, f, indent=2)
 
     return redirect('/admin')
-
 
 @app.route('/delete/<prenom>/<nom>', methods=['POST'])
 def delete(prenom, nom):
@@ -204,12 +200,11 @@ def delete(prenom, nom):
         json.dump(new_data, f, indent=2)
 
     return redirect('/admin')
-import json
 
-
+# ✅ NOUVELLE ROUTE POUR CHANGEMENT DE STATUT
 @app.route("/toggle_status/<prenom>/<nom>", methods=["POST"])
 def toggle_status(prenom, nom):
-    with open("data.json", "r", encoding="utf-8") as f:
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     for d in data:
@@ -220,7 +215,7 @@ def toggle_status(prenom, nom):
                 d["status"] = "COMPLET"
             break
 
-    with open("data.json", "w", encoding="utf-8") as f:
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
     return redirect("/admin")
