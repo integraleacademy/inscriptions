@@ -35,7 +35,6 @@ tr:nth-child(even) {
 input[type="text"], select {
   padding: 8px;
   width: 100%;
-  max-width: 200px;
   border: 1px solid #ccc;
   border-radius: 6px;
   box-sizing: border-box;
