@@ -82,7 +82,7 @@ def submit():
 
     save_data(entry)
     send_confirmation_email(entry)
-    return "Merci, votre dossier a bien été transmis."
+    return render_template('submit.html')  # ✅ Affiche la vraie page de confirmation
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
