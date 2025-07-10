@@ -17,10 +17,7 @@
         <th>Nom</th>
         <th>Prénom</th>
         <th>Email</th>
-        <th>Statut dossier</th>
-        <th>Commentaires</th>
-        <th>Fichiers</th>
-        <th>Actions</th>
+        <th colspan="4">Dossier</th>
       </tr>
     </thead>
     <tbody>
@@ -29,32 +26,22 @@
         <td>{{ row.nom }}</td>
         <td>{{ row.prenom }}</td>
         <td>{{ row.email }}</td>
-
-        <!-- Statut dossier -->
-        <td>
-          <form method="post" action="/update/{{ row.prenom }}/{{ row.nom }}">
+        <td colspan="4">
+          <form method="post" action="/update/{{ row.prenom }}/{{ row.nom }}" class="actions">
             <select name="status">
               <option value="INCOMPLET" {% if row.status == 'INCOMPLET' %}selected{% endif %}>INCOMPLET</option>
               <option value="COMPLET" {% if row.status == 'COMPLET' %}selected{% endif %}>COMPLET</option>
             </select>
-        </td>
 
-        <!-- Commentaire -->
-        <td>
-          <input type="text" name="commentaire" value="{{ row.commentaire }}" placeholder="Commentaire">
-        </td>
+            <input type="text" name="commentaire" value="{{ row.commentaire }}" placeholder="Commentaire">
 
-        <!-- Fichiers -->
-        <td class="actions">
-          <a href="/download/{{ row.folder }}" class="btn download">📁 Télécharger</a>
-          <a href="/fiche/{{ row.prenom }}/{{ row.nom }}" class="btn pdf">📄 Fiche PDF</a>
-        </td>
+            <a href="/download/{{ row.folder }}" class="btn download">📁 Télécharger</a>
+            <a href="/fiche/{{ row.prenom }}/{{ row.nom }}" class="btn pdf">📄 Fiche PDF</a>
 
-        <!-- Actions -->
-        <td class="actions">
             <button type="submit" class="btn save">💾 Enregistrer</button>
           </form>
-          <form method="post" action="/delete/{{ row.prenom }}/{{ row.nom }}">
+
+          <form method="post" action="/delete/{{ row.prenom }}/{{ row.nom }}" class="actions" style="margin-top: 10px;">
             <button type="submit" class="btn delete">🗑️ Supprimer</button>
           </form>
         </td>
