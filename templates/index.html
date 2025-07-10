@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Inscription - Intégrale Academy</title>
+  <title>Dossier stagiaire Intégrale Academy</title>
   <link rel="stylesheet" href="/static/css/style.css">
   <style>
     body {
@@ -70,7 +70,7 @@
       <img src="/static/logo.png" alt="Logo Intégrale Academy" style="max-height: 140px;">
     </div>
 
-    <h1>Inscription à la formation</h1>
+    <h1>Dossier stagiaire Intégrale Academy</h1>
     <form action="/submit" method="post" enctype="multipart/form-data">
       <h2>Étape 1 : Informations personnelles</h2>
       <label>Nom : <input type="text" name="nom" required></label>
@@ -97,7 +97,7 @@
       <label>Ville : <input type="text" name="ville" required></label>
 
       <h2>Étape 2 : Autorisation préalable CNAPS</h2>
-      <label>Numéro CNAPS :
+      <label>Numéro CNAPS (commençant par PRE ou CAR) :
         <input type="text" id="cnaps" name="cnaps" maxlength="30"
                oninput="formatCnaps(this)"
                pattern="(PRE|CAR)-\d{3}-\d{4}-\d{2}-\d{2}-\d{11}"
@@ -106,15 +106,15 @@
 
       <div class="example-cnaps"></div>
 
-      <h2>Étape 3 : Documents</h2>
+      <h2>Étape 3 : Documents à télécharger</h2>
       <label>Photo d'identité : <input type="file" name="photo_identite" required></label>
       <label>Carte Vitale : <input type="file" name="carte_vitale" required></label>
 
       <!-- ✅ Aligné comme les autres -->
-      <label>Carte d'identité / Passeport (obligatoire) :
+      <label>Carte d'identité recto ou Passeport (obligatoire) :
         <input type="file" name="identity_file_1" required>
       </label>
-      <label>Carte d'identité / Passeport (facultatif) :
+      <label>Carte d'identité verso (facultatif) :
         <input type="file" name="identity_file_2">
       </label>
 
