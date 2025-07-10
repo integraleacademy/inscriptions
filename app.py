@@ -1,4 +1,3 @@
-
 from flask import Flask, render_template, request, redirect, send_file, session, url_for
 import os, json, zipfile
 from werkzeug.utils import secure_filename
@@ -45,17 +44,22 @@ def submit():
     person_folder = os.path.join(app.config['UPLOAD_FOLDER'], full_name)
     os.makedirs(person_folder, exist_ok=True)
 
-    doc_fields = ['photo_identite', 'carte_vitale', 'piece_identite']
     saved_files = []
 
-    for field in doc_fields:
-        uploaded = files.getlist(field)
-        for f in uploaded:
-            if f and f.filename:
-                filename = secure_filename(f.filename)
-                path = os.path.join(person_folder, filename)
-                f.save(path)
-                saved_files.append(path)
+    # 🔧 Enregistrement des 4 fichiers attendus
+    all_files = {
+        'photo_identite': files.get('photo_identite'),
+        'carte_vitale': files.get('carte_vitale'),
+        'identity_file_1': files.get('identity_file_1'),
+        'identity_file_2': files.get('identity_file_2')
+    }
+
+    for field_name, f in all_files.items():
+        if f and f.filename:
+            filename = secure_filename(f"{field_name}_{f.filename}")
+            path = os.path.join(person_folder, filename)
+            f.save(path)
+            saved_files.append(path)
 
     entry = {
         "nom": nom,
@@ -134,7 +138,6 @@ def fiche(prenom, nom):
     return send_file(path, as_attachment=True)
 
 def send_confirmation_email(data):
-
     html_email_content = """
     <html>
       <body>
@@ -156,7 +159,6 @@ def send_confirmation_email(data):
         server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
         server.sendmail(msg['From'], [msg['To']], msg.as_string())
 
-
 @app.route('/update/<prenom>/<nom>', methods=['POST'])
 def update(prenom, nom):
     if not session.get('admin'):
@@ -177,7 +179,6 @@ def update(prenom, nom):
         json.dump(data, f, indent=2)
 
     return redirect('/admin')
-
 
 @app.route('/delete/<prenom>/<nom>', methods=['POST'])
 def delete(prenom, nom):
