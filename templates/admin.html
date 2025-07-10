@@ -27,23 +27,25 @@
         <td>{{ row.prenom }}</td>
         <td>{{ row.email }}</td>
         <td colspan="4">
-          <form method="post" action="/update/{{ row.prenom }}/{{ row.nom }}" class="actions">
-            <select name="status">
-              <option value="INCOMPLET" {% if row.status == 'INCOMPLET' %}selected{% endif %}>INCOMPLET</option>
-              <option value="COMPLET" {% if row.status == 'COMPLET' %}selected{% endif %}>COMPLET</option>
-            </select>
+          <div class="actions">
+            <form method="post" action="/update/{{ row.prenom }}/{{ row.nom }}" style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <select name="status">
+                <option value="INCOMPLET" {% if row.status == 'INCOMPLET' %}selected{% endif %}>INCOMPLET</option>
+                <option value="COMPLET" {% if row.status == 'COMPLET' %}selected{% endif %}>COMPLET</option>
+              </select>
 
-            <input type="text" name="commentaire" value="{{ row.commentaire }}" placeholder="Commentaire">
+              <input type="text" name="commentaire" value="{{ row.commentaire }}" placeholder="Commentaire">
 
-            <a href="/download/{{ row.folder }}" class="btn download">📁 Télécharger</a>
-            <a href="/fiche/{{ row.prenom }}/{{ row.nom }}" class="btn pdf">📄 Fiche PDF</a>
+              <a href="/download/{{ row.folder }}" class="btn download">📁 Télécharger</a>
+              <a href="/fiche/{{ row.prenom }}/{{ row.nom }}" class="btn pdf">📄 Fiche PDF</a>
 
-            <button type="submit" class="btn save">💾 Enregistrer</button>
-          </form>
+              <button type="submit" class="btn save">💾 Enregistrer</button>
+            </form>
 
-          <form method="post" action="/delete/{{ row.prenom }}/{{ row.nom }}" class="actions" style="margin-top: 10px;">
-            <button type="submit" class="btn delete">🗑️ Supprimer</button>
-          </form>
+            <form method="post" action="/delete/{{ row.prenom }}/{{ row.nom }}">
+              <button type="submit" class="btn delete">🗑️ Supprimer</button>
+            </form>
+          </div>
         </td>
       </tr>
       {% endfor %}
