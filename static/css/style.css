@@ -1,0 +1,107 @@
+body {
+  font-family: Arial, sans-serif;
+  background-color: #fef9f1;
+  margin: 0;
+  padding: 0;
+}
+
+h1, h2 {
+  color: #222;
+  text-align: center;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+th, td {
+  padding: 12px;
+  text-align: center;
+  border-bottom: 1px solid #ddd;
+}
+
+th {
+  background-color: #f4c45a;
+  color: #000;
+  font-weight: bold;
+}
+
+tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+input[type="text"], select {
+  padding: 8px;
+  width: 100%;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+button {
+  padding: 10px 16px;
+  border-radius: 8px;
+  color: white;
+  font-weight: bold;
+  text-decoration: none;
+  display: inline-block;
+  text-align: center;
+  border: none;
+  cursor: pointer;
+}
+
+button:hover {
+  opacity: 0.85;
+}
+
+.btn.save {
+  background-color: #28a745;
+}
+.btn.download {
+  background-color: #007bff;
+}
+.btn.pdf {
+  background-color: #8e44ad;
+}
+.btn.delete {
+  background-color: #c0392b;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.actions .btn {
+  padding: 10px 16px;
+  border-radius: 8px;
+  color: white;
+  font-weight: bold;
+  text-decoration: none;
+  display: inline-block;
+  text-align: center;
+  border: none;
+  cursor: pointer;
+}
+
+.admin-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background-color: #fef9f1;
+  padding: 20px;
+}
+
+.admin-header img {
+  height: 80px;
+}
+
+.admin-header h1 {
+  margin: 0;
+  font-size: 24px;
+}
