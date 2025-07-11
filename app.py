@@ -6,6 +6,7 @@ from datetime import datetime
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import unicodedata
 
 UPLOAD_FOLDER = '/mnt/data/uploads'
 DATA_FILE = '/mnt/data/data.json'
@@ -17,6 +18,12 @@ app.secret_key = 'supersecretkey'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+def clean_text(text):
+    """Nettoie les caractères non supportés par fpdf (latin-1)"""
+    if not isinstance(text, str):
+        text = str(text)
+    return unicodedata.normalize('NFKD', text).encode('latin-1', 'ignore').decode('latin-1')
 
 def save_data(entry):
     if not os.path.exists(DATA_FILE):
@@ -46,7 +53,6 @@ def submit():
 
     saved_files = []
 
-    # 🔧 Enregistrement des 4 fichiers attendus
     all_files = {
         'photo_identite': files.get('photo_identite'),
         'carte_vitale': files.get('carte_vitale'),
@@ -82,7 +88,7 @@ def submit():
 
     save_data(entry)
     send_confirmation_email(entry)
-    return render_template('submit.html')  # ✅ Affiche la vraie page de confirmation
+    return render_template('submit.html')
 
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
@@ -131,8 +137,10 @@ def fiche(prenom, nom):
     pdf.add_page()
     pdf.set_font("Arial", size=12)
     for k, v in personne.items():
-        if k not in ["folder"]:
-            pdf.cell(200, 10, txt=f"{k.upper()}: {v}", ln=True)
+        if k != "folder":
+            ligne = clean_text(f"{k.upper()}: {v}")
+            pdf.cell(200, 10, txt=ligne, ln=True)
+
     path = f"/mnt/data/fiche_{prenom}_{nom}.pdf"
     pdf.output(path)
     return send_file(path, as_attachment=True)
