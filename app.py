@@ -7,6 +7,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import unicodedata
+from urllib.parse import unquote  # <- ajouté
 
 UPLOAD_FOLDER = '/mnt/data/uploads'
 DATA_FILE = '/mnt/data/data.json'
@@ -44,8 +45,9 @@ def submit():
     form = request.form
     files = request.files
 
-    nom = form['nom']
-    prenom = form['prenom']
+    # --- mini-changes: strip des noms pour éviter espaces traînants ---
+    nom = form['nom'].strip()
+    prenom = form['prenom'].strip()
     email = form['email']
     full_name = f"{nom}_{prenom}".replace(" ", "_")
     person_folder = os.path.join(app.config['UPLOAD_FOLDER'], full_name)
@@ -67,8 +69,6 @@ def submit():
             f.save(path)
             saved_files.append(path)
 
-
-
     if form.get('formation') == 'A3P':
         a3p_files = {
             'assurance_rc': files.get('assurance_rc'),
@@ -82,6 +82,7 @@ def submit():
                 full_path = os.path.join(person_folder, renamed)
                 f.save(full_path)
                 saved_files.append(full_path)
+
     entry = {
         "nom": nom,
         "prenom": prenom,
@@ -138,13 +139,26 @@ def download(folder):
                 zipf.write(full_path, arcname=file)
     return send_file(zip_path, as_attachment=True)
 
+# --- Ajouts pour robustesse de la route fiche ---
+def _norm(s):
+    if not isinstance(s, str):
+        s = str(s)
+    # normalise, retire espaces autour, met en minuscules
+    return unicodedata.normalize('NFKC', s).strip().lower()
+
 @app.route('/fiche/<prenom>/<nom>')
 def fiche(prenom, nom):
+    # Nettoyer/decoder les paramètres d’URL
+    prenom = _norm(unquote(prenom))
+    nom = _norm(unquote(nom))
+
     if not os.path.exists(DATA_FILE):
         return "Données manquantes"
     with open(DATA_FILE) as f:
         data = json.load(f)
-    personne = next((d for d in data if d['nom'] == nom and d['prenom'] == prenom), None)
+
+    # Recherche tolérante sur prénom/nom
+    personne = next((d for d in data if _norm(d.get('nom')) == nom and _norm(d.get('prenom')) == prenom), None)
     if not personne:
         return "Stagiaire non trouvé"
 
@@ -156,7 +170,7 @@ def fiche(prenom, nom):
             ligne = clean_text(f"{k.upper()}: {v}")
             pdf.cell(200, 10, txt=ligne, ln=True)
 
-    path = f"/mnt/data/fiche_{prenom}_{nom}.pdf"
+    path = f"/mnt/data/fiche_{clean_text(personne['prenom'])}_{clean_text(personne['nom'])}.pdf"
     pdf.output(path)
     return send_file(path, as_attachment=True)
 
