@@ -37,6 +37,8 @@
 
             <a href="/download/{{ row.folder }}" class="btn download">📁 Télécharger</a>
             <a href="/fiche/{{ row.prenom|trim }}/{{ row.nom|trim }}" class="btn pdf">📄 Fiche PDF</a>
+            <a href="/idpack/{{ row.prenom|trim }}/{{ row.nom|trim }}" class="btn pdf">🪪 ID PDF</a>
+            <a href="/photosheet/{{ row.prenom|trim }}/{{ row.nom|trim }}" class="btn pdf">🖼️ Photos DOCX</a>
 
             <button type="submit" class="btn save">💾 Enregistrer</button>
           </form>
