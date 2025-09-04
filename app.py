@@ -119,7 +119,9 @@ def submit():
     for field in ['photo_identite', 'carte_vitale', 'identity_file_1', 'identity_file_2']:
         f = files.get(field)
         if f and f.filename:
-            f.save(os.path.join(person_folder, secure_filename(f"{field}_{f.filename}")))
+            f.save(os.path.join(person_folder, secure_filename(f"{field}_{f.filename}"))
+
+            )
 
     # A3P si présent
     if form.get('formation') == 'A3P':
@@ -216,41 +218,67 @@ def send_confirmation_email(data):
         server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
         server.sendmail(msg['From'], [msg['To']], msg.as_string())
 
+# ----------- UPDATE (tolérant + ciblage par folder) -----------
 @app.route('/update/<prenom>/<nom>', methods=['POST'])
 def update(prenom, nom):
     if not session.get('admin'):
         return redirect('/admin')
+
+    prenom_n = _norm(unquote(prenom))
+    nom_n = _norm(unquote(nom))
+    folder = request.form.get('folder', '')
+
     if not os.path.exists(DATA_FILE):
         return "Données introuvables"
+
     with open(DATA_FILE, 'r') as f:
         data = json.load(f)
+
     for d in data:
-        if d['prenom'] == prenom and d['nom'] == nom:
-            d['status'] = request.form.get('status')
-            d['commentaire'] = request.form.get('commentaire')
+        same_folder = (folder and d.get('folder') == folder)
+        same_name = (_norm(d.get('prenom', '')) == prenom_n and _norm(d.get('nom', '')) == nom_n)
+        if same_folder or same_name:
+            d['status'] = request.form.get('status', d.get('status'))
+            d['commentaire'] = request.form.get('commentaire', d.get('commentaire', ''))
+            break
+
     with open(DATA_FILE, 'w') as f:
         json.dump(data, f, indent=2)
+
     return redirect('/admin')
 
+# ----------- DELETE (tolérant + robustesse FS) -----------
 @app.route('/delete/<prenom>/<nom>', methods=['POST'])
 def delete(prenom, nom):
     if not session.get('admin'):
         return redirect('/admin')
+
+    prenom_n = _norm(unquote(prenom))
+    nom_n = _norm(unquote(nom))
+
     if not os.path.exists(DATA_FILE):
         return redirect('/admin')
+
     with open(DATA_FILE, 'r') as f:
         data = json.load(f)
+
     new_data = []
     for d in data:
-        if d['prenom'] == prenom and d['nom'] == nom:
-            folder_path = os.path.join(app.config['UPLOAD_FOLDER'], d['folder'])
-            if os.path.exists(folder_path):
+        if _norm(d.get('prenom', '')) == prenom_n and _norm(d.get('nom', '')) == nom_n:
+            folder_path = os.path.join(app.config['UPLOAD_FOLDER'], d.get('folder', ''))
+            if os.path.isdir(folder_path):
                 import shutil
-                shutil.rmtree(folder_path)
+                try:
+                    shutil.rmtree(folder_path)
+                except Exception as e:
+                    print(f"[delete] Impossible de supprimer {folder_path}: {e}")
+            # on n'ajoute pas cette entrée -> supprimée
         else:
             new_data.append(d)
+
     with open(DATA_FILE, 'w') as f:
         json.dump(new_data, f, indent=2)
+
     return redirect('/admin')
 
 # ==========================================
@@ -279,7 +307,7 @@ def image_to_uniform_pdf_page(image_path, out_pdf_path, orientation="landscape",
         elif orientation == "portrait" and im.width > im.height:
             im = im.rotate(90, expand=True)
 
-        # Fit contain
+        # Fit contain (aucun rognage)
         scale = min(target_px_w / im.width, target_px_h / im.height)
         new_w, new_h = max(1, int(im.width * scale)), max(1, int(im.height * scale))
         im_resized = im.resize((new_w, new_h), Image.LANCZOS)
