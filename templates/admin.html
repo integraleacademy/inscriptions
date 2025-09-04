@@ -27,7 +27,7 @@
         <td>{{ row.prenom }}</td>
         <td>{{ row.email }}</td>
         <td colspan="4">
-          <form method="post" action="/update/{{ row.prenom }}/{{ row.nom }}" class="actions">
+          <form method="post" action="/update/{{ row.prenom|trim }}/{{ row.nom|trim }}" class="actions">
             <select name="status">
               <option value="INCOMPLET" {% if row.status == 'INCOMPLET' %}selected{% endif %}>INCOMPLET</option>
               <option value="COMPLET" {% if row.status == 'COMPLET' %}selected{% endif %}>COMPLET</option>
@@ -36,12 +36,12 @@
             <input type="text" name="commentaire" value="{{ row.commentaire }}" placeholder="Commentaire">
 
             <a href="/download/{{ row.folder }}" class="btn download">📁 Télécharger</a>
-            <a href="/fiche/{{ row.prenom }}/{{ row.nom }}" class="btn pdf">📄 Fiche PDF</a>
+            <a href="/fiche/{{ row.prenom|trim }}/{{ row.nom|trim }}" class="btn pdf">📄 Fiche PDF</a>
 
             <button type="submit" class="btn save">💾 Enregistrer</button>
           </form>
 
-          <form method="post" action="/delete/{{ row.prenom }}/{{ row.nom }}" class="actions" style="margin-top: 10px;">
+          <form method="post" action="/delete/{{ row.prenom|trim }}/{{ row.nom|trim }}" class="actions" style="margin-top: 10px;">
             <button type="submit" class="btn delete">🗑️ Supprimer</button>
           </form>
         </td>
