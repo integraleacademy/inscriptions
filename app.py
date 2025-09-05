@@ -9,7 +9,7 @@ from email.mime.text import MIMEText
 import unicodedata
 from urllib.parse import unquote
 
-# === AJOUTS ===
+# === LIBS ===
 from PIL import Image, ImageOps
 from io import BytesIO
 from docx import Document
@@ -19,7 +19,6 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from PyPDF2 import PdfMerger, PdfReader
-import fitz  # PyMuPDF pour convertir PDF -> image
 
 UPLOAD_FOLDER = '/mnt/data/uploads'
 DATA_FILE = '/mnt/data/data.json'
@@ -96,7 +95,7 @@ def set_cell_border(cell, color="000000", size='8'):
     for edge in ('top', 'left', 'bottom', 'right'):
         el = OxmlElement(f'w:{edge}')
         el.set(qn('w:val'), 'single')
-        el.set(qn('w:sz'), size)      # huitièmes de point
+        el.set(qn('w:sz'), size)
         el.set(qn('w:color'), color)
         tcPr.append(el)
 
@@ -111,7 +110,6 @@ CARD_HINTS = (
 
 def decide_orientation_and_box(filename: str):
     """
-    Retourne (orientation, (w_mm,h_mm)) selon le nom du fichier.
     - 'landscape' pour cartes/passeports/permis
     - 'portrait' pour le reste (factures, justificatifs, attestations...)
     """
@@ -120,15 +118,69 @@ def decide_orientation_and_box(filename: str):
         return "landscape", CARD_BOX_MM
     return "portrait", DOC_BOX_MM
 
-def pdf_first_page_to_jpeg(pdf_path: str, out_jpg_path: str, dpi: int = 300):
-    """Convertit la 1ère page d'un PDF en JPEG HD (sans dépendance externe)."""
-    doc = fitz.open(pdf_path)
+# ---------- Conversion PDF -> images (toutes pages) ----------
+def pdf_iter_pages_to_jpegs(pdf_path: str, dpi: int = 300):
+    """
+    Rend chaque page d’un PDF en JPEG HD et retourne la liste des chemins .jpg temporaires.
+    Essaie pypdfium2, sinon PyMuPDF (fitz) si dispo, sinon Pillow/GS.
+    """
+    out_paths = []
+
+    # 1) pypdfium2 (recommandé)
     try:
-        page = doc.load_page(0)
-        pix = page.get_pixmap(dpi=dpi)
-        pix.save(out_jpg_path)
-    finally:
+        import pypdfium2 as pdfium
+        pdf = pdfium.PdfDocument(pdf_path)
+        scale = dpi / 72.0
+        for i in range(len(pdf)):
+            page = pdf[i]
+            bitmap = page.render(scale=scale)
+            pil = bitmap.to_pil()
+            pil = ensure_rgb(pil)
+            out = f"/mnt/data/_pdfpg_{os.path.basename(pdf_path)}_{i+1}.jpg"
+            pil.save(out, 'JPEG', quality=92)
+            out_paths.append(out)
+        if out_paths:
+            return out_paths
+    except Exception as e:
+        print(f"[pdfpages] pypdfium2 KO: {e}")
+
+    # 2) PyMuPDF (fitz)
+    try:
+        import fitz
+        doc = fitz.open(pdf_path)
+        for i in range(doc.page_count):
+            page = doc.load_page(i)
+            pix = page.get_pixmap(dpi=dpi)
+            out = f"/mnt/data/_pdfpg_{os.path.basename(pdf_path)}_{i+1}.jpg"
+            pix.save(out)
+            out_paths.append(out)
         doc.close()
+        if out_paths:
+            return out_paths
+    except Exception as e:
+        print(f"[pdfpages] PyMuPDF KO: {e}")
+
+    # 3) Pillow (nécessite Ghostscript côté système)
+    try:
+        with Image.open(pdf_path) as im:
+            i = 0
+            while True:
+                im.load()
+                frame = ensure_rgb(im.copy())
+                out = f"/mnt/data/_pdfpg_{os.path.basename(pdf_path)}_{i+1}.jpg"
+                frame.save(out, 'JPEG', quality=92)
+                out_paths.append(out)
+                i += 1
+                im.seek(im.tell() + 1)
+    except EOFError:
+        pass
+    except Exception as e:
+        print(f"[pdfpages] Pillow KO: {e}")
+
+    if not out_paths:
+        raise RuntimeError("Impossible de rasteriser le PDF (installe pypdfium2 ou PyMuPDF).")
+
+    return out_paths
 
 # =====================
 #        ROUTES
@@ -300,7 +352,6 @@ def delete(prenom, nom):
                     shutil.rmtree(folder_path)
                 except Exception as e:
                     print(f"[delete] Impossible de supprimer {folder_path}: {e}")
-            # n'ajoute pas cette entrée -> supprimée
         else:
             new_data.append(d)
 
@@ -310,11 +361,11 @@ def delete(prenom, nom):
     return redirect('/admin')
 
 # ==========================================
-#     PDF "TOUS LES DOCS SAUF LA PHOTO"
+#      IMAGE -> page A4 encadrée (fit)
 # ==========================================
 def image_to_uniform_pdf_page(image_path, out_pdf_path, orientation="landscape", box_mm=(180,120)):
     """
-    Place une image sur A4 :
+    Place une image sur A4 avec:
       - Correction EXIF
       - Orientation forcée ('landscape'/'portrait')
       - Redimensionnement SANS rognage (fit contain)
@@ -350,7 +401,8 @@ def image_to_uniform_pdf_page(image_path, out_pdf_path, orientation="landscape",
         bio.seek(0)
 
     tmp = f"/mnt/data/_tmp_{os.path.basename(image_path)}.jpg"
-    with open(tmp, 'wb') as f: f.write(bio.read())
+    with open(tmp, 'wb') as f:
+        f.write(bio.read())
 
     pdf = FPDF(unit='mm', format='A4')
     pdf.add_page()
@@ -359,42 +411,52 @@ def image_to_uniform_pdf_page(image_path, out_pdf_path, orientation="landscape",
     pdf.image(tmp, x=X, y=Y, w=w_mm, h=h_mm)
     pdf.output(out_pdf_path)
 
-    try: os.remove(tmp)
-    except: pass
+    try:
+        os.remove(tmp)
+    except:
+        pass
 
+# ==========================================
+#     PDF "TOUS LES DOCS SAUF LA PHOTO"
+#     (images + PDF -> images cadrées)
+# ==========================================
 def build_all_docs_pdf(folder, out_pdf):
     """
-    Fusionne tous les documents (images + PDFs) SAUF les photo_identite*.
-      - Cartes/passeports/permis => paysage + CARD_BOX_MM
-      - Justificatifs/attestations => portrait + DOC_BOX_MM
-      - PDFs natifs => fusion tels quels
-    (Détection par contenu pour gérer les fichiers sans extension.)
+    Fusionne tous les documents SAUF 'photo_identite*' :
+      - Images -> cadrées dans box selon type (landscape/portrait)
+      - PDF (toutes pages) -> rasterisés puis cadrés pareil
     """
     files = list_all_user_files(folder)
-    # exclure les photos d'identité (quel que soit le type/extension)
     files = [p for p in files if not os.path.basename(p).lower().startswith('photo_identite')]
 
-    usable = []
-    for p in files:
-        if is_image_like(p) or is_pdf_like(p):
-            usable.append(p)
-
+    usable = [p for p in files if is_image_like(p) or is_pdf_like(p)]
     if not usable:
         raise FileNotFoundError("Aucun document compatible (hors photo).")
 
-    temp_pages = []
+    temp_pages = []      # PDF pages temporaires à fusionner
+    temp_images = []     # images intermédiaires (pour PDF)
+
     for p in usable:
+        base = os.path.basename(p)
+        orientation, box_mm = decide_orientation_and_box(base)
+
         if is_image_like(p):
-            orientation, box_mm = decide_orientation_and_box(os.path.basename(p))
-            tmp_pdf = f"/mnt/data/_p_{os.path.basename(p)}.pdf"
+            # 1 image -> 1 page PDF uniformisée
+            tmp_pdf = f"/mnt/data/_p_{base}.pdf"
             image_to_uniform_pdf_page(p, tmp_pdf, orientation=orientation, box_mm=box_mm)
             temp_pages.append(tmp_pdf)
+
         elif is_pdf_like(p):
+            # PDF multi-pages -> chaque page rasterisée puis cadrée
             try:
-                _ = PdfReader(p)  # valide même sans extension
-                temp_pages.append(p)
-            except Exception:
-                pass  # ignore PDF corrompu
+                page_imgs = pdf_iter_pages_to_jpegs(p, dpi=300)
+                temp_images.extend(page_imgs)
+                for idx, img_path in enumerate(page_imgs, start=1):
+                    tmp_pdf = f"/mnt/data/_p_{base}_{idx}.pdf"
+                    image_to_uniform_pdf_page(img_path, tmp_pdf, orientation=orientation, box_mm=box_mm)
+                    temp_pages.append(tmp_pdf)
+            except Exception as e:
+                print(f"[idpack] Impossible de rasteriser {p}: {e}")
 
     if not temp_pages:
         raise FileNotFoundError("Impossible de préparer les documents.")
@@ -403,16 +465,24 @@ def build_all_docs_pdf(folder, out_pdf):
     for page in temp_pages:
         try:
             merger.append(page)
-        except Exception:
+        except Exception as e:
+            print(f"[merge] page ignorée {page}: {e}")
             continue
     merger.write(out_pdf)
     merger.close()
 
-    # Nettoyage des PDF temporaires issus d'images
+    # Nettoyage
     for p in temp_pages:
         if p.startswith('/mnt/data/_p_'):
-            try: os.remove(p)
-            except: pass
+            try:
+                os.remove(p)
+            except:
+                pass
+    for img in temp_images:
+        try:
+            os.remove(img)
+        except:
+            pass
 
 @app.route('/idpack/<prenom>/<nom>')
 def idpack(prenom, nom):
@@ -542,8 +612,15 @@ def photosheet(prenom, nom):
         # Si PDF -> conversion 1re page en JPEG
         source_for_prepare = cand_path
         if is_pdf_like(cand_path):
-            tmp_source_img = f"/mnt/data/_photo_pdf_{os.path.basename(cand_path)}.jpg"
-            pdf_first_page_to_jpeg(cand_path, tmp_source_img, dpi=300)
+            # réutilise le même mécanisme multi-pages mais on ne garde que la page 1
+            imgs = pdf_iter_pages_to_jpegs(cand_path, dpi=300)
+            if not imgs:
+                return "Impossible de convertir le PDF de la photo."
+            tmp_source_img = imgs[0]
+            # supprime les suivantes (si créées)
+            for extra in imgs[1:]:
+                try: os.remove(extra)
+                except: pass
             source_for_prepare = tmp_source_img
 
         # Normalisation portrait + fond blanc
@@ -557,7 +634,5 @@ def photosheet(prenom, nom):
     finally:
         for pth in (tmp_source_img, tmp_portrait):
             if pth and os.path.exists(pth):
-                try:
-                    os.remove(pth)
-                except:
-                    pass
+                try: os.remove(pth)
+                except: pass
