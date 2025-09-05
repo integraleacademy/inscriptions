@@ -19,6 +19,7 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from PyPDF2 import PdfMerger, PdfReader
+import fitz  # PyMuPDF pour convertir PDF -> image
 
 UPLOAD_FOLDER = '/mnt/data/uploads'
 DATA_FILE = '/mnt/data/data.json'
@@ -56,26 +57,45 @@ def _norm(s):
 IMG_EXTS = {'.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff', '.webp'}
 PDF_EXTS = {'.pdf'}
 
-def is_image_file(path): return os.path.splitext(path.lower())[1] in IMG_EXTS
-def is_pdf_file(path): return os.path.splitext(path.lower())[1] in PDF_EXTS
+def is_image_file(path):  # par extension
+    return os.path.splitext(path.lower())[1] in IMG_EXTS
+
+def is_pdf_file(path):  # par extension
+    return os.path.splitext(path.lower())[1] in PDF_EXTS
+
+def is_pdf_like(path: str) -> bool:  # par contenu (même sans extension)
+    try:
+        with open(path, 'rb') as f:
+            return f.read(5) == b'%PDF-'
+    except Exception:
+        return False
+
+def is_image_like(path: str) -> bool:  # par contenu (PIL)
+    try:
+        with Image.open(path) as im:
+            im.verify()
+        return True
+    except Exception:
+        return False
 
 def list_all_user_files(folder):
-    if not os.path.isdir(folder): return []
+    if not os.path.isdir(folder):
+        return []
     return [os.path.join(folder, f) for f in sorted(os.listdir(folder))]
 
 def ensure_rgb(img):
-    if img.mode in ('RGBA','LA'):
-        bg = Image.new('RGB', img.size, (255,255,255))
+    if img.mode in ('RGBA', 'LA'):
+        bg = Image.new('RGB', img.size, (255, 255, 255))
         bg.paste(img, mask=img.split()[-1])
         return bg
-    return img.convert('RGB') if img.mode!='RGB' else img
+    return img.convert('RGB') if img.mode != 'RGB' else img
 
 def set_cell_border(cell, color="000000", size='8'):
     tc = cell._tc
     tcPr = tc.get_or_add_tcPr()
-    for edge in ('top','left','bottom','right'):
+    for edge in ('top', 'left', 'bottom', 'right'):
         el = OxmlElement(f'w:{edge}')
-        el.set(qn('w:val'),'single')
+        el.set(qn('w:val'), 'single')
         el.set(qn('w:sz'), size)      # huitièmes de point
         el.set(qn('w:color'), color)
         tcPr.append(el)
@@ -100,6 +120,16 @@ def decide_orientation_and_box(filename: str):
         return "landscape", CARD_BOX_MM
     return "portrait", DOC_BOX_MM
 
+def pdf_first_page_to_jpeg(pdf_path: str, out_jpg_path: str, dpi: int = 300):
+    """Convertit la 1ère page d'un PDF en JPEG HD (sans dépendance externe)."""
+    doc = fitz.open(pdf_path)
+    try:
+        page = doc.load_page(0)
+        pix = page.get_pixmap(dpi=dpi)
+        pix.save(out_jpg_path)
+    finally:
+        doc.close()
+
 # =====================
 #        ROUTES
 # =====================
@@ -119,9 +149,7 @@ def submit():
     for field in ['photo_identite', 'carte_vitale', 'identity_file_1', 'identity_file_2']:
         f = files.get(field)
         if f and f.filename:
-            f.save(os.path.join(person_folder, secure_filename(f"{field}_{f.filename}"))
-
-            )
+            f.save(os.path.join(person_folder, secure_filename(f"{field}_{f.filename}")))
 
     # A3P si présent
     if form.get('formation') == 'A3P':
@@ -272,7 +300,7 @@ def delete(prenom, nom):
                     shutil.rmtree(folder_path)
                 except Exception as e:
                     print(f"[delete] Impossible de supprimer {folder_path}: {e}")
-            # on n'ajoute pas cette entrée -> supprimée
+            # n'ajoute pas cette entrée -> supprimée
         else:
             new_data.append(d)
 
@@ -340,22 +368,30 @@ def build_all_docs_pdf(folder, out_pdf):
       - Cartes/passeports/permis => paysage + CARD_BOX_MM
       - Justificatifs/attestations => portrait + DOC_BOX_MM
       - PDFs natifs => fusion tels quels
+    (Détection par contenu pour gérer les fichiers sans extension.)
     """
-    files = [p for p in list_all_user_files(folder) if not os.path.basename(p).startswith('photo_identite')]
-    usable = [p for p in files if is_image_file(p) or is_pdf_file(p)]
+    files = list_all_user_files(folder)
+    # exclure les photos d'identité (quel que soit le type/extension)
+    files = [p for p in files if not os.path.basename(p).lower().startswith('photo_identite')]
+
+    usable = []
+    for p in files:
+        if is_image_like(p) or is_pdf_like(p):
+            usable.append(p)
+
     if not usable:
         raise FileNotFoundError("Aucun document compatible (hors photo).")
 
     temp_pages = []
     for p in usable:
-        if is_image_file(p):
+        if is_image_like(p):
             orientation, box_mm = decide_orientation_and_box(os.path.basename(p))
             tmp_pdf = f"/mnt/data/_p_{os.path.basename(p)}.pdf"
             image_to_uniform_pdf_page(p, tmp_pdf, orientation=orientation, box_mm=box_mm)
             temp_pages.append(tmp_pdf)
-        elif is_pdf_file(p):
+        elif is_pdf_like(p):
             try:
-                _ = PdfReader(p)  # valide
+                _ = PdfReader(p)  # valide même sans extension
                 temp_pages.append(p)
             except Exception:
                 pass  # ignore PDF corrompu
@@ -431,6 +467,47 @@ def build_single_photo_docx(photo, full_name, out_docx):
 
     doc.save(out_docx)
 
+# === Finders photo identité (strict + fallback) ===
+def find_photo_candidate_strict(person_folder):
+    if not os.path.isdir(person_folder):
+        return None
+    files = sorted(os.listdir(person_folder))
+    for f in files:
+        if f.lower().startswith('photo_identite'):
+            p = os.path.join(person_folder, f)
+            if is_image_like(p) or is_pdf_like(p):
+                return p
+    return None
+
+def find_photo_candidate_fallback(person_folder):
+    if not os.path.isdir(person_folder):
+        return None
+    files = sorted(os.listdir(person_folder))
+
+    KEYS = ('photo', 'identite', 'identity', 'id', 'portrait', 'visage')
+    for f in files:
+        lf = f.lower()
+        if any(k in lf for k in KEYS):
+            p = os.path.join(person_folder, f)
+            if is_image_like(p) or is_pdf_like(p):
+                return p
+
+    for f in files:
+        p = os.path.join(person_folder, f)
+        if is_image_like(p):
+            try:
+                with Image.open(p) as im:
+                    if im.height >= im.width:
+                        return p
+            except Exception:
+                pass
+
+    for f in files:
+        p = os.path.join(person_folder, f)
+        if is_pdf_like(p):
+            return p
+    return None
+
 @app.route('/photosheet/<prenom>/<nom>')
 def photosheet(prenom, nom):
     prenom, nom = _norm(unquote(prenom)), _norm(unquote(nom))
@@ -443,19 +520,44 @@ def photosheet(prenom, nom):
         return "Stagiaire non trouvé"
 
     folder = os.path.join(app.config['UPLOAD_FOLDER'], pers['folder'])
-    photos = [os.path.join(folder, f) for f in os.listdir(folder)
-              if f.startswith('photo_identite') and is_image_file(f)]
-    if not photos:
+
+    # 1) STRICT: 'photo_identite*' (image OU pdf, même sans extension)
+    cand_path = find_photo_candidate_strict(folder)
+
+    # 2) FALLBACK si rien trouvé
+    if not cand_path:
+        cand_path = find_photo_candidate_fallback(folder)
+
+    # 3) Rien trouvé -> log de debug
+    if not cand_path:
+        try:
+            print(f"[photosheet] Aucun fichier photo trouvé dans {folder}. Contenu: {os.listdir(folder) if os.path.isdir(folder) else 'N/A'}")
+        except Exception as e:
+            print(f"[photosheet] Impossible de lister {folder}: {e}")
         return "Aucune photo d'identité trouvée pour ce dossier."
 
-    src_photo = photos[0]
-    tmp = f"/mnt/data/_tmp_photo_{os.path.basename(src_photo)}.jpg"
+    tmp_source_img = None
+    tmp_portrait = None
     try:
-        prepare_portrait_photo(src_photo, tmp)
+        # Si PDF -> conversion 1re page en JPEG
+        source_for_prepare = cand_path
+        if is_pdf_like(cand_path):
+            tmp_source_img = f"/mnt/data/_photo_pdf_{os.path.basename(cand_path)}.jpg"
+            pdf_first_page_to_jpeg(cand_path, tmp_source_img, dpi=300)
+            source_for_prepare = tmp_source_img
+
+        # Normalisation portrait + fond blanc
+        tmp_portrait = f"/mnt/data/_tmp_photo_{os.path.basename(source_for_prepare)}.jpg"
+        prepare_portrait_photo(source_for_prepare, tmp_portrait)
+
         out = f"/mnt/data/PHOTOS_{clean_text(pers['prenom'])}_{clean_text(pers['nom'])}.docx"
         full_name = f"{pers['nom']} {pers['prenom']}"
-        build_single_photo_docx(tmp, full_name, out)
+        build_single_photo_docx(tmp_portrait, full_name, out)
         return send_file(out, as_attachment=True)
     finally:
-        try: os.remove(tmp)
-        except: pass
+        for pth in (tmp_source_img, tmp_portrait):
+            if pth and os.path.exists(pth):
+                try:
+                    os.remove(pth)
+                except:
+                    pass
