@@ -28,6 +28,11 @@ DATA_FILE = '/mnt/data/data.json'
 ADMIN_USER = 'admin'
 ADMIN_PASS = 'integrale2025'
 
+# Optimisations rendu/recadrage
+RENDER_DPI = 150          # 150 dpi = lisible & rapide
+JPEG_QUALITY = 85         # qualité suffisante pour l’admin
+PDF_PAGE_LIMIT = 80       # sécurité anti-PDF monstres (augmente si besoin)
+
 # Flask avec config statics explicite
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.secret_key = 'supersecretkey'
@@ -36,6 +41,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 # Création des dossiers nécessaires
 os.makedirs("/mnt/data", exist_ok=True)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs("static", exist_ok=True)  # au cas où
 
 # =====================
 #        HELPERS
@@ -125,7 +131,7 @@ def decide_orientation_and_box(filename: str):
     return "portrait", DOC_BOX_MM
 
 # ---------- Conversion PDF -> images (toutes pages) ----------
-def pdf_iter_pages_to_jpegs(pdf_path: str, dpi: int = 300):
+def pdf_iter_pages_to_jpegs(pdf_path: str, dpi: int = RENDER_DPI):
     out_paths = []
 
     # 1) pypdfium2
@@ -139,7 +145,7 @@ def pdf_iter_pages_to_jpegs(pdf_path: str, dpi: int = 300):
             pil = bitmap.to_pil()
             pil = ensure_rgb(pil)
             out = f"/mnt/data/_pdfpg_{os.path.basename(pdf_path)}_{i+1}.jpg"
-            pil.save(out, 'JPEG', quality=92)
+            pil.save(out, 'JPEG', quality=JPEG_QUALITY, optimize=True)
             out_paths.append(out)
         if out_paths:
             return out_paths
@@ -170,7 +176,7 @@ def pdf_iter_pages_to_jpegs(pdf_path: str, dpi: int = 300):
                 im.load()
                 frame = ensure_rgb(im.copy())
                 out = f"/mnt/data/_pdfpg_{os.path.basename(pdf_path)}_{i+1}.jpg"
-                frame.save(out, 'JPEG', quality=92)
+                frame.save(out, 'JPEG', quality=JPEG_QUALITY, optimize=True)
                 out_paths.append(out)
                 i += 1
                 im.seek(im.tell() + 1)
@@ -395,33 +401,34 @@ def delete(prenom, nom):
 #      IMAGE -> page A4 encadrée (fit)
 # ==========================================
 def image_to_uniform_pdf_page(image_path, out_pdf_path, orientation="landscape", box_mm=(180,120)):
+    """
+    Recadre une image dans une boîte sur A4 (cadre léger), en limitant CPU/RAM.
+    """
     w_mm, h_mm = box_mm
     A4_W, A4_H = 210, 297
     X, Y = (A4_W - w_mm) / 2.0, (A4_H - h_mm) / 2.0
-    target_px_w, target_px_h = int(w_mm * 12), int(h_mm * 12)  # ~300 dpi
+    # ~200 dpi sur la zone utile
+    target_px_w, target_px_h = int(w_mm * 8), int(h_mm * 8)
 
     with Image.open(image_path) as im:
         im = ImageOps.exif_transpose(im)
         im = ensure_rgb(im)
 
-        # Orientation forcée
         if orientation == "landscape" and im.height > im.width:
             im = im.rotate(90, expand=True)
         elif orientation == "portrait" and im.width > im.height:
             im = im.rotate(90, expand=True)
 
-        # Fit contain
         scale = min(target_px_w / im.width, target_px_h / im.height)
         new_w, new_h = max(1, int(im.width * scale)), max(1, int(im.height * scale))
         im_resized = im.resize((new_w, new_h), Image.LANCZOS)
 
-        # Canevas blanc centré
         canvas = Image.new('RGB', (target_px_w, target_px_h), (255,255,255))
         off_x, off_y = (target_px_w - new_w) // 2, (target_px_h - new_h) // 2
         canvas.paste(im_resized, (off_x, off_y))
 
         bio = BytesIO()
-        canvas.save(bio, format='JPEG', quality=92)
+        canvas.save(bio, format='JPEG', quality=JPEG_QUALITY, optimize=True)
         bio.seek(0)
 
     tmp = f"/mnt/data/_tmp_{os.path.basename(image_path)}.jpg"
@@ -442,62 +449,149 @@ def image_to_uniform_pdf_page(image_path, out_pdf_path, orientation="landscape",
 
 # ==========================================
 #     PDF "TOUS LES DOCS SAUF LA PHOTO"
+#     (images + PDF -> recadrés A4, stream)
 # ==========================================
 def build_all_docs_pdf(folder, out_pdf):
+    """
+    Recadre TOUT (images + PDF) en A4 via une boîte, en traitant page par page
+    pour limiter CPU/RAM et éviter les timeouts.
+    """
     files = list_all_user_files(folder)
     files = [p for p in files if not os.path.basename(p).lower().startswith('photo_identite')]
 
-    usable = [p for p in files if is_image_like(p) or is_pdf_like(p)]
-    if not usable:
-        raise FileNotFoundError("Aucun document compatible (hors photo).")
+    if not files:
+        raise FileNotFoundError("Aucun document trouvé (hors photo).")
 
-    temp_pages = []
-    temp_images = []
+    merger = PdfMerger()
 
-    for p in usable:
+    # === 1) IMAGES d'abord (rapide) ===
+    for p in files:
+        if not is_image_like(p):
+            continue
+        base = os.path.basename(p)
+        orientation, box_mm = decide_orientation_and_box(base)
+        tmp_pdf = None
+        try:
+            tmp_pdf = f"/mnt/data/_p_img_{base}.pdf"
+            image_to_uniform_pdf_page(p, tmp_pdf, orientation=orientation, box_mm=box_mm)
+            merger.append(tmp_pdf)
+        except Exception as e:
+            print(f"[idpack] image ignorée {p}: {e}")
+        finally:
+            if tmp_pdf:
+                try: os.remove(tmp_pdf)
+                except: pass
+
+    # === 2) Puis les PDF (page par page) ===
+    for p in files:
+        if not is_pdf_like(p):
+            continue
         base = os.path.basename(p)
         orientation, box_mm = decide_orientation_and_box(base)
 
-        if is_image_like(p):
-            tmp_pdf = f"/mnt/data/_p_{base}.pdf"
-            image_to_uniform_pdf_page(p, tmp_pdf, orientation=orientation, box_mm=box_mm)
-            temp_pages.append(tmp_pdf)
+        used_pages = 0
+        rendered_any = False
 
-        elif is_pdf_like(p):
-            try:
-                page_imgs = pdf_iter_pages_to_jpegs(p, dpi=300)
-                temp_images.extend(page_imgs)
-                for idx, img_path in enumerate(page_imgs, start=1):
-                    tmp_pdf = f"/mnt/data/_p_{base}_{idx}.pdf"
-                    image_to_uniform_pdf_page(img_path, tmp_pdf, orientation=orientation, box_mm=box_mm)
-                    temp_pages.append(tmp_pdf)
-            except Exception as e:
-                print(f"[idpack] Impossible de rasteriser {p}: {e}")
-
-    if not temp_pages:
-        raise FileNotFoundError("Impossible de préparer les documents.")
-
-    merger = PdfMerger()
-    for page in temp_pages:
+        # --- pypdfium2 ---
         try:
-            merger.append(page)
+            import pypdfium2 as pdfium
+            pdf = pdfium.PdfDocument(p)
+            scale = RENDER_DPI / 72.0
+            page_count = len(pdf)
+            for i in range(page_count):
+                if used_pages >= PDF_PAGE_LIMIT:
+                    print(f"[idpack] limite pages atteinte ({PDF_PAGE_LIMIT}) pour {base}")
+                    break
+                page = pdf[i]
+                bitmap = page.render(scale=scale)
+                pil = bitmap.to_pil()
+                pil = ensure_rgb(pil)
+
+                tmp_img = f"/mnt/data/_pdfpg_{base}_{i+1}.jpg"
+                pil.save(tmp_img, 'JPEG', quality=JPEG_QUALITY, optimize=True)
+
+                tmp_pdf = f"/mnt/data/_p_{base}_{i+1}.pdf"
+                image_to_uniform_pdf_page(tmp_img, tmp_pdf, orientation=orientation, box_mm=box_mm)
+                merger.append(tmp_pdf)
+
+                # nettoyage
+                try: os.remove(tmp_img)
+                except: pass
+                try: os.remove(tmp_pdf)
+                except: pass
+
+                used_pages += 1
+                rendered_any = True
+
+            if rendered_any:
+                continue
         except Exception as e:
-            print(f"[merge] page ignorée {page}: {e}")
-            continue
+            print(f"[idpack] pypdfium2 KO pour {base}: {e}")
+
+        # --- PyMuPDF (fitz) fallback ---
+        try:
+            import fitz
+            doc = fitz.open(p)
+            page_count = doc.page_count
+            for i in range(page_count):
+                if used_pages >= PDF_PAGE_LIMIT:
+                    print(f"[idpack] limite pages atteinte ({PDF_PAGE_LIMIT}) pour {base}")
+                    break
+                page = doc.load_page(i)
+                pix = page.get_pixmap(dpi=RENDER_DPI)
+                tmp_img = f"/mnt/data/_pdfpg_{base}_{i+1}.jpg"
+                pix.save(tmp_img)
+
+                tmp_pdf = f"/mnt/data/_p_{base}_{i+1}.pdf"
+                image_to_uniform_pdf_page(tmp_img, tmp_pdf, orientation=orientation, box_mm=box_mm)
+                merger.append(tmp_pdf)
+
+                try: os.remove(tmp_img)
+                except: pass
+                try: os.remove(tmp_pdf)
+                except: pass
+
+                used_pages += 1
+                rendered_any = True
+            doc.close()
+
+            if rendered_any:
+                continue
+        except Exception as e:
+            print(f"[idpack] PyMuPDF KO pour {base}: {e}")
+
+        # --- Dernier recours : Pillow ---
+        try:
+            with Image.open(p) as im:
+                idx = 0
+                while True:
+                    if used_pages >= PDF_PAGE_LIMIT:
+                        print(f"[idpack] limite pages atteinte ({PDF_PAGE_LIMIT}) pour {base}")
+                        break
+                    im.load()
+                    frame = ensure_rgb(im.copy())
+                    tmp_img = f"/mnt/data/_pdfpg_{base}_{idx+1}.jpg"
+                    frame.save(tmp_img, 'JPEG', quality=JPEG_QUALITY, optimize=True)
+
+                    tmp_pdf = f"/mnt/data/_p_{base}_{idx+1}.pdf"
+                    image_to_uniform_pdf_page(tmp_img, tmp_pdf, orientation=orientation, box_mm=box_mm)
+                    merger.append(tmp_pdf)
+
+                    try: os.remove(tmp_img)
+                    except: pass
+                    try: os.remove(tmp_pdf)
+                    except: pass
+
+                    idx += 1
+                    used_pages += 1
+                    im.seek(im.tell() + 1)
+        except EOFError:
+            pass
+        except Exception as e:
+            print(f"[idpack] Impossible de rasteriser {base}: {e}")
+
     merger.write(out_pdf)
     merger.close()
-
-    for p in temp_pages:
-        if p.startswith('/mnt/data/_p_'):
-            try:
-                os.remove(p)
-            except:
-                pass
-    for img in temp_images:
-        try:
-            os.remove(img)
-        except:
-            pass
 
 @app.route('/idpack/<prenom>/<nom>')
 def idpack(prenom, nom):
@@ -528,7 +622,7 @@ def prepare_portrait_photo(src, out):
         im = ensure_rgb(im)
         if im.width > im.height:
             im = im.rotate(90, expand=True)
-        im.save(out, 'JPEG', quality=92)
+        im.save(out, 'JPEG', quality=JPEG_QUALITY, optimize=True)
 
 def build_single_photo_docx(photo, full_name, out_docx):
     PHOTO_W, PHOTO_H = 35, 45  # mm
@@ -616,15 +710,13 @@ def photosheet(prenom, nom):
     try:
         source_for_prepare = cand_path
         if is_pdf_like(cand_path):
-            imgs = pdf_iter_pages_to_jpegs(cand_path, dpi=300)
+            imgs = pdf_iter_pages_to_jpegs(cand_path, dpi=RENDER_DPI)
             if not imgs:
                 return "Impossible de convertir le PDF de la photo.", 500
             tmp_source_img = imgs[0]
             for extra in imgs[1:]:
-                try:
-                    os.remove(extra)
-                except:
-                    pass
+                try: os.remove(extra)
+                except: pass
             source_for_prepare = tmp_source_img
 
         tmp_portrait = f"/mnt/data/_tmp_photo_{os.path.basename(source_for_prepare)}.jpg"
@@ -639,7 +731,5 @@ def photosheet(prenom, nom):
     finally:
         for pth in (tmp_source_img, tmp_portrait):
             if pth and os.path.exists(pth):
-                try:
-                    os.remove(pth)
-                except:
-                    pass
+                try: os.remove(pth)
+                except: pass
