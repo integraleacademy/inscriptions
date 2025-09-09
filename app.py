@@ -20,14 +20,21 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from PyPDF2 import PdfMerger, PdfReader
 
+# =====================
+#       CONSTANTES
+# =====================
 UPLOAD_FOLDER = '/mnt/data/uploads'
 DATA_FILE = '/mnt/data/data.json'
 ADMIN_USER = 'admin'
 ADMIN_PASS = 'integrale2025'
 
-app = Flask(__name__)
+# Flask avec config statics explicite
+app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.secret_key = 'supersecretkey'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Création des dossiers nécessaires
+os.makedirs("/mnt/data", exist_ok=True)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # =====================
@@ -39,11 +46,14 @@ def clean_text(text):
     return unicodedata.normalize('NFKD', text).encode('latin-1', 'ignore').decode('latin-1')
 
 def save_data(entry):
-    if not os.path.exists(DATA_FILE):
-        data = []
-    else:
-        with open(DATA_FILE, 'r') as f:
-            data = json.load(f)
+    data = []
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, 'r') as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"[data] lecture KO: {e}")
+            data = []
     data.append(entry)
     with open(DATA_FILE, 'w') as f:
         json.dump(data, f, indent=2)
@@ -56,20 +66,20 @@ def _norm(s):
 IMG_EXTS = {'.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff', '.webp'}
 PDF_EXTS = {'.pdf'}
 
-def is_image_file(path):  # par extension
+def is_image_file(path):
     return os.path.splitext(path.lower())[1] in IMG_EXTS
 
-def is_pdf_file(path):  # par extension
+def is_pdf_file(path):
     return os.path.splitext(path.lower())[1] in PDF_EXTS
 
-def is_pdf_like(path: str) -> bool:  # par contenu (même sans extension)
+def is_pdf_like(path: str) -> bool:
     try:
         with open(path, 'rb') as f:
             return f.read(5) == b'%PDF-'
     except Exception:
         return False
 
-def is_image_like(path: str) -> bool:  # par contenu (PIL)
+def is_image_like(path: str) -> bool:
     try:
         with Image.open(path) as im:
             im.verify()
@@ -109,10 +119,6 @@ CARD_HINTS = (
 )
 
 def decide_orientation_and_box(filename: str):
-    """
-    - 'landscape' pour cartes/passeports/permis
-    - 'portrait' pour le reste (factures, justificatifs, attestations...)
-    """
     name = filename.lower()
     if any(h in name for h in CARD_HINTS):
         return "landscape", CARD_BOX_MM
@@ -120,13 +126,9 @@ def decide_orientation_and_box(filename: str):
 
 # ---------- Conversion PDF -> images (toutes pages) ----------
 def pdf_iter_pages_to_jpegs(pdf_path: str, dpi: int = 300):
-    """
-    Rend chaque page d’un PDF en JPEG HD et retourne la liste des chemins .jpg temporaires.
-    Essaie pypdfium2, sinon PyMuPDF (fitz) si dispo, sinon Pillow/GS.
-    """
     out_paths = []
 
-    # 1) pypdfium2 (recommandé)
+    # 1) pypdfium2
     try:
         import pypdfium2 as pdfium
         pdf = pdfium.PdfDocument(pdf_path)
@@ -160,7 +162,7 @@ def pdf_iter_pages_to_jpegs(pdf_path: str, dpi: int = 300):
     except Exception as e:
         print(f"[pdfpages] PyMuPDF KO: {e}")
 
-    # 3) Pillow (nécessite Ghostscript côté système)
+    # 3) Pillow (Ghostscript nécessaire)
     try:
         with Image.open(pdf_path) as im:
             i = 0
@@ -185,9 +187,19 @@ def pdf_iter_pages_to_jpegs(pdf_path: str, dpi: int = 300):
 # =====================
 #        ROUTES
 # =====================
+
+# Health-check ultra simple (Render -> Settings -> Health Check Path: /healthz)
+@app.route('/healthz')
+def healthz():
+    return "ok", 200
+
 @app.route('/')
 def index():
-    return render_template('index.html')
+    # On évite qu’un template manquant fasse échouer le health-check/démarrage
+    try:
+        return render_template('index.html')
+    except Exception as e:
+        return f"OK (index.html manquant ?) : {e}", 200
 
 @app.route('/submit', methods=['POST'])
 def submit():
@@ -227,11 +239,11 @@ def submit():
 @app.route('/admin', methods=['GET', 'POST'])
 def admin():
     if request.method == 'POST':
-        if request.form['user'] == ADMIN_USER and request.form['pass'] == ADMIN_PASS:
+        if request.form.get('user') == ADMIN_USER and request.form.get('pass') == ADMIN_PASS:
             session['admin'] = True
             return redirect('/admin')
         else:
-            return "Accès refusé"
+            return "Accès refusé", 403
     if not session.get('admin'):
         return '''
         <form method="post">
@@ -241,7 +253,7 @@ def admin():
         </form>
         '''
     if not os.path.exists(DATA_FILE):
-        return "Aucune donnée"
+        return render_template('admin.html', data=[])
     with open(DATA_FILE) as f:
         data = json.load(f)
     return render_template('admin.html', data=data)
@@ -249,12 +261,17 @@ def admin():
 @app.route('/download/<folder>')
 def download(folder):
     folder_path = os.path.join(app.config['UPLOAD_FOLDER'], folder)
+    if not os.path.isdir(folder_path):
+        return "Dossier introuvable", 404
     zip_path = f"/mnt/data/{folder}.zip"
     with zipfile.ZipFile(zip_path, 'w') as zipf:
         for root, _, files in os.walk(folder_path):
             for file in files:
                 full_path = os.path.join(root, file)
-                zipf.write(full_path, arcname=file)
+                arc = os.path.relpath(full_path, folder_path)
+                zipf.write(full_path, arcname=arc)
+    if not os.path.exists(zip_path) or os.path.getsize(zip_path) == 0:
+        return "Archive vide", 500
     return send_file(zip_path, as_attachment=True)
 
 @app.route('/fiche/<prenom>/<nom>')
@@ -262,41 +279,55 @@ def fiche(prenom, nom):
     prenom = _norm(unquote(prenom))
     nom = _norm(unquote(nom))
     if not os.path.exists(DATA_FILE):
-        return "Données manquantes"
+        return "Données manquantes", 404
     with open(DATA_FILE) as f:
         data = json.load(f)
     personne = next((d for d in data if _norm(d.get('nom')) == nom and _norm(d.get('prenom')) == prenom), None)
     if not personne:
-        return "Stagiaire non trouvé"
+        return "Stagiaire non trouvé", 404
 
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    for k, v in personne.items():
-        if k != "folder":
-            pdf.cell(200, 10, txt=clean_text(f"{k.upper()}: {v}"), ln=True)
+    try:
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+        for k, v in personne.items():
+            if k != "folder":
+                pdf.cell(200, 8, txt=clean_text(f"{k.upper()}: {v}"), ln=True)
 
-    path = f"/mnt/data/fiche_{clean_text(personne['prenom'])}_{clean_text(personne['nom'])}.pdf"
-    pdf.output(path)
-    return send_file(path, as_attachment=True)
+        path = f"/mnt/data/fiche_{clean_text(personne['prenom'])}_{clean_text(personne['nom'])}.pdf"
+        pdf.output(path)
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            return "Erreur: PDF vide", 500
+        return send_file(path, as_attachment=True)
+    except Exception as e:
+        print(f"[fiche] erreur: {e}")
+        return f"Erreur fiche: {e}", 500
 
 def send_confirmation_email(data):
-    html = f"""
-    <html><body>
-      <p>Bonjour {data['prenom']},</p>
-      <p>Nous vous confirmons la bonne réception de votre dossier. L’équipe d’Intégrale Academy vous remercie.</p>
-      <p>Nous restons disponibles pour toute question complémentaire.</p>
-      <br><p>Cordialement,<br>L’équipe Intégrale Academy</p>
-    </body></html>
-    """
-    msg = MIMEMultipart('alternative')
-    msg['Subject'] = "Confirmation de dépôt de dossier – Intégrale Academy"
-    msg['From'] = os.environ.get("MAIL_USER")
-    msg['To'] = data['email']
-    msg.attach(MIMEText(html, 'html'))
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
-        server.sendmail(msg['From'], [msg['To']], msg.as_string())
+    try:
+        user = os.environ.get("MAIL_USER")
+        pwd  = os.environ.get("MAIL_PASS")
+        if not user or not pwd:
+            print("[mail] MAIL_USER/MAIL_PASS absents → email non envoyé")
+            return
+        html = f"""
+        <html><body>
+          <p>Bonjour {data['prenom']},</p>
+          <p>Nous vous confirmons la bonne réception de votre dossier. L’équipe d’Intégrale Academy vous remercie.</p>
+          <p>Nous restons disponibles pour toute question complémentaire.</p>
+          <br><p>Cordialement,<br>L’équipe Intégrale Academy</p>
+        </body></html>
+        """
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = "Confirmation de dépôt de dossier – Intégrale Academy"
+        msg['From'] = user
+        msg['To'] = data['email']
+        msg.attach(MIMEText(html, 'html'))
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(user, pwd)
+            server.sendmail(msg['From'], [msg['To']], msg.as_string())
+    except Exception as e:
+        print(f"[mail] échec envoi: {e}")
 
 # ----------- UPDATE (tolérant + ciblage par folder) -----------
 @app.route('/update/<prenom>/<nom>', methods=['POST'])
@@ -309,7 +340,7 @@ def update(prenom, nom):
     folder = request.form.get('folder', '')
 
     if not os.path.exists(DATA_FILE):
-        return "Données introuvables"
+        return "Données introuvables", 404
 
     with open(DATA_FILE, 'r') as f:
         data = json.load(f)
@@ -364,13 +395,6 @@ def delete(prenom, nom):
 #      IMAGE -> page A4 encadrée (fit)
 # ==========================================
 def image_to_uniform_pdf_page(image_path, out_pdf_path, orientation="landscape", box_mm=(180,120)):
-    """
-    Place une image sur A4 avec:
-      - Correction EXIF
-      - Orientation forcée ('landscape'/'portrait')
-      - Redimensionnement SANS rognage (fit contain)
-      - Fond blanc + cadre léger
-    """
     w_mm, h_mm = box_mm
     A4_W, A4_H = 210, 297
     X, Y = (A4_W - w_mm) / 2.0, (A4_H - h_mm) / 2.0
@@ -380,13 +404,13 @@ def image_to_uniform_pdf_page(image_path, out_pdf_path, orientation="landscape",
         im = ImageOps.exif_transpose(im)
         im = ensure_rgb(im)
 
-        # Orientation forcée selon le type
+        # Orientation forcée
         if orientation == "landscape" and im.height > im.width:
             im = im.rotate(90, expand=True)
         elif orientation == "portrait" and im.width > im.height:
             im = im.rotate(90, expand=True)
 
-        # Fit contain (aucun rognage)
+        # Fit contain
         scale = min(target_px_w / im.width, target_px_h / im.height)
         new_w, new_h = max(1, int(im.width * scale)), max(1, int(im.height * scale))
         im_resized = im.resize((new_w, new_h), Image.LANCZOS)
@@ -418,14 +442,8 @@ def image_to_uniform_pdf_page(image_path, out_pdf_path, orientation="landscape",
 
 # ==========================================
 #     PDF "TOUS LES DOCS SAUF LA PHOTO"
-#     (images + PDF -> images cadrées)
 # ==========================================
 def build_all_docs_pdf(folder, out_pdf):
-    """
-    Fusionne tous les documents SAUF 'photo_identite*' :
-      - Images -> cadrées dans box selon type (landscape/portrait)
-      - PDF (toutes pages) -> rasterisés puis cadrés pareil
-    """
     files = list_all_user_files(folder)
     files = [p for p in files if not os.path.basename(p).lower().startswith('photo_identite')]
 
@@ -433,21 +451,19 @@ def build_all_docs_pdf(folder, out_pdf):
     if not usable:
         raise FileNotFoundError("Aucun document compatible (hors photo).")
 
-    temp_pages = []      # PDF pages temporaires à fusionner
-    temp_images = []     # images intermédiaires (pour PDF)
+    temp_pages = []
+    temp_images = []
 
     for p in usable:
         base = os.path.basename(p)
         orientation, box_mm = decide_orientation_and_box(base)
 
         if is_image_like(p):
-            # 1 image -> 1 page PDF uniformisée
             tmp_pdf = f"/mnt/data/_p_{base}.pdf"
             image_to_uniform_pdf_page(p, tmp_pdf, orientation=orientation, box_mm=box_mm)
             temp_pages.append(tmp_pdf)
 
         elif is_pdf_like(p):
-            # PDF multi-pages -> chaque page rasterisée puis cadrée
             try:
                 page_imgs = pdf_iter_pages_to_jpegs(p, dpi=300)
                 temp_images.extend(page_imgs)
@@ -471,7 +487,6 @@ def build_all_docs_pdf(folder, out_pdf):
     merger.write(out_pdf)
     merger.close()
 
-    # Nettoyage
     for p in temp_pages:
         if p.startswith('/mnt/data/_p_'):
             try:
@@ -488,18 +503,20 @@ def build_all_docs_pdf(folder, out_pdf):
 def idpack(prenom, nom):
     prenom, nom = _norm(unquote(prenom)), _norm(unquote(nom))
     if not os.path.exists(DATA_FILE):
-        return "Données manquantes"
+        return "Données manquantes", 404
     with open(DATA_FILE) as f:
         data = json.load(f)
     pers = next((d for d in data if _norm(d['nom']) == nom and _norm(d['prenom']) == prenom), None)
     if not pers:
-        return "Stagiaire non trouvé"
+        return "Stagiaire non trouvé", 404
     folder = os.path.join(app.config['UPLOAD_FOLDER'], pers['folder'])
     out = f"/mnt/data/IDs_{clean_text(pers['prenom'])}_{clean_text(pers['nom'])}.pdf"
     try:
         build_all_docs_pdf(folder, out)
     except Exception as e:
-        return f"Erreur génération PDF: {e}"
+        return f"Erreur génération PDF: {e}", 500
+    if not os.path.exists(out) or os.path.getsize(out) == 0:
+        return "Erreur: PDF vide", 500
     return send_file(out, as_attachment=True)
 
 # ==========================================
@@ -509,35 +526,28 @@ def prepare_portrait_photo(src, out):
     with Image.open(src) as im:
         im = ImageOps.exif_transpose(im)
         im = ensure_rgb(im)
-        # Mettre en portrait seulement si vraiment paysage
         if im.width > im.height:
             im = im.rotate(90, expand=True)
         im.save(out, 'JPEG', quality=92)
 
 def build_single_photo_docx(photo, full_name, out_docx):
-    PHOTO_W, PHOTO_H = 35, 45  # taille photo identité
+    PHOTO_W, PHOTO_H = 35, 45  # mm
     doc = Document()
-    # Table 1x1 haut-gauche
     table = doc.add_table(rows=1, cols=1)
     table.alignment = WD_TABLE_ALIGNMENT.LEFT
     cell = table.cell(0, 0)
 
-    # Vider la cellule et insérer la photo
     p = cell.paragraphs[0]
     p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     p.add_run().add_picture(photo, width=Mm(PHOTO_W), height=Mm(PHOTO_H))
 
-    # Nom/Prénom en dessous
     p2 = cell.add_paragraph()
     p2.alignment = WD_ALIGN_PARAGRAPH.LEFT
     p2.add_run(full_name)
 
-    # Cadre
     set_cell_border(cell, color="000000", size='8')
-
     doc.save(out_docx)
 
-# === Finders photo identité (strict + fallback) ===
 def find_photo_candidate_strict(person_folder):
     if not os.path.isdir(person_folder):
         return None
@@ -582,57 +592,54 @@ def find_photo_candidate_fallback(person_folder):
 def photosheet(prenom, nom):
     prenom, nom = _norm(unquote(prenom)), _norm(unquote(nom))
     if not os.path.exists(DATA_FILE):
-        return "Données manquantes"
+        return "Données manquantes", 404
     with open(DATA_FILE) as f:
         data = json.load(f)
     pers = next((d for d in data if _norm(d['nom']) == nom and _norm(d['prenom']) == prenom), None)
     if not pers:
-        return "Stagiaire non trouvé"
+        return "Stagiaire non trouvé", 404
 
     folder = os.path.join(app.config['UPLOAD_FOLDER'], pers['folder'])
 
-    # 1) STRICT: 'photo_identite*' (image OU pdf, même sans extension)
     cand_path = find_photo_candidate_strict(folder)
-
-    # 2) FALLBACK si rien trouvé
     if not cand_path:
         cand_path = find_photo_candidate_fallback(folder)
-
-    # 3) Rien trouvé -> log de debug
     if not cand_path:
         try:
-            print(f"[photosheet] Aucun fichier photo trouvé dans {folder}. Contenu: {os.listdir(folder) if os.path.isdir(folder) else 'N/A'}")
+            print(f"[photosheet] Aucun fichier photo dans {folder}. Contenu: {os.listdir(folder) if os.path.isdir(folder) else 'N/A'}")
         except Exception as e:
             print(f"[photosheet] Impossible de lister {folder}: {e}")
-        return "Aucune photo d'identité trouvée pour ce dossier."
+        return "Aucune photo d'identité trouvée pour ce dossier.", 404
 
     tmp_source_img = None
     tmp_portrait = None
     try:
-        # Si PDF -> conversion 1re page en JPEG
         source_for_prepare = cand_path
         if is_pdf_like(cand_path):
-            # réutilise le même mécanisme multi-pages mais on ne garde que la page 1
             imgs = pdf_iter_pages_to_jpegs(cand_path, dpi=300)
             if not imgs:
-                return "Impossible de convertir le PDF de la photo."
+                return "Impossible de convertir le PDF de la photo.", 500
             tmp_source_img = imgs[0]
-            # supprime les suivantes (si créées)
             for extra in imgs[1:]:
-                try: os.remove(extra)
-                except: pass
+                try:
+                    os.remove(extra)
+                except:
+                    pass
             source_for_prepare = tmp_source_img
 
-        # Normalisation portrait + fond blanc
         tmp_portrait = f"/mnt/data/_tmp_photo_{os.path.basename(source_for_prepare)}.jpg"
         prepare_portrait_photo(source_for_prepare, tmp_portrait)
 
         out = f"/mnt/data/PHOTOS_{clean_text(pers['prenom'])}_{clean_text(pers['nom'])}.docx"
         full_name = f"{pers['nom']} {pers['prenom']}"
         build_single_photo_docx(tmp_portrait, full_name, out)
+        if not os.path.exists(out) or os.path.getsize(out) == 0:
+            return "Erreur: DOCX vide", 500
         return send_file(out, as_attachment=True)
     finally:
         for pth in (tmp_source_img, tmp_portrait):
             if pth and os.path.exists(pth):
-                try: os.remove(pth)
-                except: pass
+                try:
+                    os.remove(pth)
+                except:
+                    pass
