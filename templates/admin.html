@@ -4,6 +4,24 @@
   <meta charset="UTF-8">
   <title>Admin - Intégrale Academy</title>
   <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    .btn-valid {
+      background-color: #28a745;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .btn-invalid {
+      background-color: #dc3545;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
   <div class="admin-header">
@@ -31,6 +49,8 @@
             <select name="status">
               <option value="INCOMPLET" {% if row.status == 'INCOMPLET' %}selected{% endif %}>INCOMPLET</option>
               <option value="COMPLET" {% if row.status == 'COMPLET' %}selected{% endif %}>COMPLET</option>
+              <option value="VALIDE" {% if row.status == 'VALIDE' %}selected{% endif %}>VALIDE</option>
+              <option value="NON_VALIDE" {% if row.status == 'NON_VALIDE' %}selected{% endif %}>NON VALIDE</option>
             </select>
 
             <input type="text" name="commentaire" value="{{ row.commentaire }}" placeholder="Commentaire">
@@ -44,6 +64,19 @@
             <a href="/photosheet/{{ row.prenom|trim|urlencode }}/{{ row.nom|trim|urlencode }}" class="btn pdf">🖼️ Photo DOCX</a>
 
             <button type="submit" class="btn save">💾 Enregistrer</button>
+          </form>
+
+          <!-- Boutons rapides pour statut -->
+          <form method="post" action="/update/{{ row.prenom|trim|urlencode }}/{{ row.nom|trim|urlencode }}" style="display:inline;">
+            <input type="hidden" name="folder" value="{{ row.folder }}">
+            <input type="hidden" name="status" value="VALIDE">
+            <button type="submit" class="btn-valid">✔️ VALIDE</button>
+          </form>
+
+          <form method="post" action="/update/{{ row.prenom|trim|urlencode }}/{{ row.nom|trim|urlencode }}" style="display:inline;">
+            <input type="hidden" name="folder" value="{{ row.folder }}">
+            <input type="hidden" name="status" value="NON_VALIDE">
+            <button type="submit" class="btn-invalid">❌ NON VALIDE</button>
           </form>
 
           <form method="post" action="/delete/{{ row.prenom|trim|urlencode }}/{{ row.nom|trim|urlencode }}" class="actions" style="margin-top: 10px;">
