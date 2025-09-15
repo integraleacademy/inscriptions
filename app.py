@@ -1,23 +1,12 @@
-from flask import Flask, render_template, request, redirect, send_file, session, url_for
-import os, json, zipfile
+from flask import Flask, render_template, request, redirect, send_file, session
+import os, json
 from werkzeug.utils import secure_filename
-from fpdf import FPDF
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-import unicodedata
-from urllib.parse import unquote
-
-# === LIBS ===
-from PIL import Image, ImageOps
-from io import BytesIO
 from docx import Document
 from docx.shared import Mm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from PyPDF2 import PdfMerger
+import unicodedata
 
 # =====================
 #       CONSTANTES
@@ -26,10 +15,6 @@ UPLOAD_FOLDER = '/mnt/data/uploads'
 DATA_FILE = '/mnt/data/data.json'
 ADMIN_USER = 'admin'
 ADMIN_PASS = 'integrale2025'
-
-RENDER_DPI = 150
-JPEG_QUALITY = 85
-PDF_PAGE_LIMIT = 80
 
 # Flask config
 app = Flask(__name__, static_folder="static", static_url_path="/static")
@@ -67,6 +52,16 @@ def _norm(s):
         s = str(s)
     return unicodedata.normalize('NFKC', s).strip().lower()
 
+def set_cell_border(cell, color="000000", size='8'):
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    for edge in ('top', 'left', 'bottom', 'right'):
+        el = OxmlElement(f'w:{edge}')
+        el.set(qn('w:val'), 'single')
+        el.set(qn('w:sz'), size)
+        el.set(qn('w:color'), color)
+        tcPr.append(el)
+
 # =====================
 #        ROUTES
 # =====================
@@ -94,12 +89,6 @@ def submit():
         if f and f.filename:
             f.save(os.path.join(person_folder, secure_filename(f"{field}_{f.filename}")))
 
-    if form.get('formation') == 'A3P':
-        for field in ['assurance_rc', 'certificat_medical', 'permis_conduire']:
-            f = files.get(field)
-            if f and f.filename:
-                f.save(os.path.join(person_folder, secure_filename(f"{field}_{f.filename}")))
-
     entry = {
         "nom": nom, "prenom": prenom, "email": email,
         "secu": form['secu'], "naissance": form['naissance'],
@@ -111,7 +100,6 @@ def submit():
         "folder": full_name, "status": "INCOMPLET", "commentaire": ""
     }
     save_data(entry)
-    send_confirmation_email(entry)
     return render_template('submit.html')
 
 @app.route('/admin', methods=['GET', 'POST'])
@@ -137,142 +125,102 @@ def admin():
     return render_template('admin.html', data=data)
 
 # =====================
-#       EMAILS
+#   EDIT PHOTO (recadrage)
 # =====================
-def send_confirmation_email(data):
-    try:
-        user = os.environ.get("MAIL_USER")
-        pwd  = os.environ.get("MAIL_PASS")
-        if not user or not pwd:
-            print("[mail] MAIL_USER/MAIL_PASS absents → email non envoyé")
-            return
-        html = f"""
-        <html><body>
-          <p>Bonjour {data['prenom']},</p>
-          <p>Nous vous confirmons la bonne réception de votre dossier. L’équipe d’Intégrale Academy vous remercie.</p>
-          <p>Nous restons disponibles pour toute question complémentaire.</p>
-          <br><p>Cordialement,<br>L’équipe Intégrale Academy</p>
-        </body></html>
-        """
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = "Confirmation de dépôt de dossier – Intégrale Academy"
-        msg['From'] = user
-        msg['To'] = data['email']
-        msg.attach(MIMEText(html, 'html'))
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(user, pwd)
-            server.sendmail(msg['From'], [msg['To']], msg.as_string())
-    except Exception as e:
-        print(f"[mail] échec envoi: {e}")
-
-def send_nonvalide_email(data):
-    try:
-        user = os.environ.get("MAIL_USER")
-        pwd  = os.environ.get("MAIL_PASS")
-        if not user or not pwd:
-            print("[mail] MAIL_USER/MAIL_PASS absents → email non envoyé")
-            return
-
-        commentaire = data.get('commentaire', '').strip()
-        if not commentaire:
-            commentaire = "Merci de vérifier vos documents et de les renvoyer."
-
-        redrop_link = "https://inscriptions-akou.onrender.com/"  # lien dépôt
-
-        html = f"""
-        <html><body>
-          <p>Bonjour {data['prenom']} {data['nom']},</p>
-          <p>Après vérification, nous vous informons que les documents que vous avez fournis sont <b>non conformes</b>.</p>
-          <p>Merci de bien vouloir nous renvoyer vos documents corrigés dans les plus brefs délais.</p>
-          <p><b>Commentaires :</b> {commentaire}</p>
-          <br>
-          <p>➡️ Cliquez sur le lien ci-dessous pour redéposer vos documents :</p>
-          <p><a href="{redrop_link}" style="background:#28a745;color:white;padding:10px 15px;text-decoration:none;border-radius:5px;">📤 Déposer mes documents</a></p>
-          <br>
-          <p>Cordialement,<br>L’équipe Intégrale Academy</p>
-        </body></html>
-        """
-
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = "⚠️ Dossier non valide – Intégrale Academy"
-        msg['From'] = user
-        msg['To'] = data['email']
-        msg.attach(MIMEText(html, 'html'))
-
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(user, pwd)
-            server.sendmail(msg['From'], [msg['To']], msg.as_string())
-
-        print(f"[mail] Notification NON VALIDE envoyée à {data['email']}")
-    except Exception as e:
-        print(f"[mail] échec envoi NON VALIDE: {e}")
-
-# =====================
-#       UPDATE
-# =====================
-@app.route('/update/<prenom>/<nom>', methods=['POST'])
-def update(prenom, nom):
-    if not session.get('admin'):
-        return redirect('/admin')
-
-    prenom_n = _norm(unquote(prenom))
-    nom_n = _norm(unquote(nom))
-    folder = request.form.get('folder', '')
-
+@app.route('/editphoto/<prenom>/<nom>', methods=['GET'])
+def editphoto(prenom, nom):
+    prenom, nom = _norm(unquote(prenom)), _norm(unquote(nom))
     if not os.path.exists(DATA_FILE):
-        return "Données introuvables", 404
+        return "Données manquantes", 404
 
-    with open(DATA_FILE, 'r') as f:
+    with open(DATA_FILE) as f:
         data = json.load(f)
 
-    updated_entry = None
+    pers = next((d for d in data if _norm(d['nom']) == nom and _norm(d['prenom']) == prenom), None)
+    if not pers:
+        return "Stagiaire non trouvé", 404
 
-    for d in data:
-        same_folder = (folder and d.get('folder') == folder)
-        same_name = (_norm(d.get('prenom', '')) == prenom_n and _norm(d.get('nom', '')) == nom_n)
-        if same_folder or same_name:
-            new_status = request.form.get('status', d.get('status'))
-            commentaire = request.form.get('commentaire', d.get('commentaire', ''))
-            if new_status in ["INCOMPLET", "COMPLET", "VALIDE", "NON_VALIDE"]:
-                d['status'] = new_status
-            d['commentaire'] = commentaire
-            updated_entry = d
+    folder = os.path.join(app.config['UPLOAD_FOLDER'], pers['folder'])
+
+    photo_file = None
+    for f in os.listdir(folder):
+        if f.lower().startswith("photo_identite"):
+            photo_file = f
             break
 
-    with open(DATA_FILE, 'w') as f:
-        json.dump(data, f, indent=2)
+    if not photo_file:
+        return "Pas de photo trouvée", 404
 
-    # ✅ envoi mail si NON VALIDE
-    if updated_entry and updated_entry['status'] == "NON_VALIDE":
-        send_nonvalide_email(updated_entry)
+    return render_template("editphoto.html", prenom=pers['prenom'], nom=pers['nom'], folder=pers['folder'], photo=photo_file)
 
-    return redirect('/admin')
 
-# =====================
-#       DELETE
-# =====================
-@app.route('/delete/<prenom>/<nom>', methods=['POST'])
-def delete(prenom, nom):
-    if not session.get('admin'):
-        return redirect('/admin')
-    prenom_n = _norm(unquote(prenom))
-    nom_n = _norm(unquote(nom))
+@app.route('/editphoto/<prenom>/<nom>', methods=['POST'])
+def save_editphoto(prenom, nom):
+    prenom, nom = _norm(unquote(prenom)), _norm(unquote(nom))
     if not os.path.exists(DATA_FILE):
-        return redirect('/admin')
-    with open(DATA_FILE, 'r') as f:
+        return "Données manquantes", 404
+
+    with open(DATA_FILE) as f:
         data = json.load(f)
-    new_data = []
-    for d in data:
-        if _norm(d.get('prenom', '')) == prenom_n and _norm(d.get('nom', '')) == nom_n:
-            folder_path = os.path.join(app.config['UPLOAD_FOLDER'], d.get('folder', ''))
-            if os.path.isdir(folder_path):
-                import shutil
-                try:
-                    shutil.rmtree(folder_path)
-                except Exception as e:
-                    print(f"[delete] Impossible de supprimer {folder_path}: {e}")
-        else:
-            new_data.append(d)
-    with open(DATA_FILE, 'w') as f:
-        json.dump(new_data, f, indent=2)
-    return redirect('/admin')
+
+    pers = next((d for d in data if _norm(d['nom']) == nom and _norm(d['prenom']) == prenom), None)
+    if not pers:
+        return "Stagiaire non trouvé", 404
+
+    folder = os.path.join(app.config['UPLOAD_FOLDER'], pers['folder'])
+    os.makedirs(folder, exist_ok=True)
+
+    f = request.files['croppedImage']
+    save_path = os.path.join(folder, "photo_identite_recadree.jpg")
+    f.save(save_path)
+
+    print(f"[photo] Recadrage enregistré pour {pers['prenom']} {pers['nom']}")
+    return "ok"
+
+# =====================
+#   DOCX PHOTO (recadrée si dispo)
+# =====================
+@app.route('/photosheet/<prenom>/<nom>')
+def photosheet(prenom, nom):
+    prenom, nom = _norm(unquote(prenom)), _norm(unquote(nom))
+    if not os.path.exists(DATA_FILE):
+        return "Données manquantes", 404
+    with open(DATA_FILE) as f:
+        data = json.load(f)
+    pers = next((d for d in data if _norm(d['nom']) == nom and _norm(d['prenom']) == prenom), None)
+    if not pers:
+        return "Stagiaire non trouvé", 404
+
+    folder = os.path.join(app.config['UPLOAD_FOLDER'], pers['folder'])
+
+    recadree = os.path.join(folder, "photo_identite_recadree.jpg")
+    if os.path.exists(recadree):
+        photo_path = recadree
+    else:
+        photo_path = None
+        for f in os.listdir(folder):
+            if f.lower().startswith("photo_identite"):
+                photo_path = os.path.join(folder, f)
+                break
+        if not photo_path:
+            return "Aucune photo trouvée", 404
+
+    try:
+        out = f"/mnt/data/PHOTOS_{clean_text(pers['prenom'])}_{clean_text(pers['nom'])}.docx"
+        doc = Document()
+        table = doc.add_table(rows=1, cols=1)
+        cell = table.cell(0, 0)
+
+        p = cell.paragraphs[0]
+        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        p.add_run().add_picture(photo_path, width=Mm(35), height=Mm(45))
+
+        p2 = cell.add_paragraph()
+        p2.add_run(f"{pers['nom']} {pers['prenom']}")
+
+        set_cell_border(cell, color="000000", size='8')
+        doc.save(out)
+
+        return send_file(out, as_attachment=True)
+    except Exception as e:
+        return f"Erreur génération DOCX: {e}", 500
