@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Recadrer Photo - {{ prenom }} {{ nom }}</title>
+  <link  href="https://unpkg.com/cropperjs@1.5.13/dist/cropper.min.css" rel="stylesheet">
+  <style>
+    body { font-family: Arial, sans-serif; text-align:center; padding:20px; background:#fdfaf5; }
+    h2 { margin-bottom:20px; }
+    img { max-width: 100%; max-height:500px; border:1px solid #ddd; border-radius:8px; }
+    #preview { margin-top:20px; border:1px solid #ccc; padding:10px; display:inline-block; }
+    button { margin-top:20px; padding:10px 20px; border:none; background:#28a745; color:white; font-size:16px; border-radius:6px; cursor:pointer; }
+    button:hover { background:#218838; }
+  </style>
+</head>
+<body>
+  <h2>Recadrer la photo de {{ prenom }} {{ nom }}</h2>
+  <img id="image" src="/static/uploads/{{ folder }}/{{ photo }}">
+  <div id="preview"></div>
+  <br>
+  <button onclick="cropImage()">💾 Enregistrer le recadrage</button>
+
+  <script src="https://unpkg.com/cropperjs@1.5.13/dist/cropper.min.js"></script>
+  <script>
+    const image = document.getElementById('image');
+    const cropper = new Cropper(image, {
+      aspectRatio: 35/45, // format photo identité
+      viewMode: 1,
+      preview: "#preview"
+    });
+
+    function cropImage() {
+      cropper.getCroppedCanvas({
+        width: 350,
+        height: 450
+      }).toBlob((blob) => {
+        const formData = new FormData();
+        formData.append('croppedImage', blob);
+
+        fetch(window.location.pathname, {
+          method: 'POST',
+          body: formData
+        }).then(() => {
+          alert("✅ Photo recadrée enregistrée !");
+          window.location.href = "/admin";
+        });
+      });
+    }
+  </script>
+</body>
+</html>
