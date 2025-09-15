@@ -5,36 +5,38 @@
   <title>Admin - Intégrale Academy</title>
   <link rel="stylesheet" href="/static/css/style.css">
   <style>
-    .btn-valid, .btn-invalid {
+    /* Styles généraux pour les boutons */
+    .btn, .btn-valid, .btn-invalid {
       display: inline-block;
-      min-width: 100px;       /* largeur fixe pour aligner */
+      min-width: 110px;       /* largeur homogène */
       text-align: center;
-      margin: 5px 3px;        /* espace entre boutons */
+      margin: 5px 3px;
       font-weight: bold;
       font-size: 14px;
-    }
-    .btn-valid {
-      background-color: #28a745;
-      color: white;
-      border: none;
       padding: 6px 12px;
       border-radius: 5px;
-      cursor: pointer;
-    }
-    .btn-invalid {
-      background-color: #dc3545;
-      color: white;
       border: none;
-      padding: 6px 12px;
-      border-radius: 5px;
       cursor: pointer;
+      text-decoration: none;
+      color: white;
     }
+
+    /* Boutons spécifiques */
+    .btn.download { background-color: #007bff; }   /* Bleu */
+    .btn.pdf      { background-color: #6f42c1; }   /* Violet */
+    .btn.save     { background-color: #218838; }   /* Vert foncé */
+    .btn.delete   { background-color: #c82333; }   /* Rouge foncé */
+
+    .btn-valid    { background-color: #28a745; }   /* Vert */
+    .btn-invalid  { background-color: #dc3545; }   /* Rouge */
+
+    /* Statuts colorés */
     .status-badge {
       padding: 5px 10px;
       border-radius: 6px;
       font-weight: bold;
       display: inline-block;
-      min-width: 100px;
+      min-width: 110px;
       text-align: center;
     }
     .status-incomplet { background: #e0e0e0; color: #333; }
