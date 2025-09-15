@@ -1,34 +1,26 @@
-from flask import Flask, render_template, request, redirect, send_file, session
-import os, json
+from flask import Flask, render_template, request, redirect, send_file, session, url_for
+import os, json, unicodedata
 from werkzeug.utils import secure_filename
 from docx import Document
 from docx.shared import Mm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-import unicodedata
+from urllib.parse import unquote   # ✅ import ajouté
 
-# =====================
-#       CONSTANTES
-# =====================
 UPLOAD_FOLDER = '/mnt/data/uploads'
 DATA_FILE = '/mnt/data/data.json'
 ADMIN_USER = 'admin'
 ADMIN_PASS = 'integrale2025'
 
-# Flask config
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.secret_key = 'supersecretkey'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Folders
 os.makedirs("/mnt/data", exist_ok=True)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs("static", exist_ok=True)
 
-# =====================
-#        HELPERS
-# =====================
 def clean_text(text):
     if not isinstance(text, str):
         text = str(text)
@@ -40,8 +32,7 @@ def save_data(entry):
         try:
             with open(DATA_FILE, 'r') as f:
                 data = json.load(f)
-        except Exception as e:
-            print(f"[data] lecture KO: {e}")
+        except:
             data = []
     data.append(entry)
     with open(DATA_FILE, 'w') as f:
@@ -62,9 +53,6 @@ def set_cell_border(cell, color="000000", size='8'):
         el.set(qn('w:color'), color)
         tcPr.append(el)
 
-# =====================
-#        ROUTES
-# =====================
 @app.route('/healthz')
 def healthz():
     return "ok", 200
@@ -124,62 +112,45 @@ def admin():
         data = json.load(f)
     return render_template('admin.html', data=data)
 
-# =====================
-#   EDIT PHOTO (recadrage)
-# =====================
+# === EDIT PHOTO ===
 @app.route('/editphoto/<prenom>/<nom>', methods=['GET'])
 def editphoto(prenom, nom):
     prenom, nom = _norm(unquote(prenom)), _norm(unquote(nom))
     if not os.path.exists(DATA_FILE):
         return "Données manquantes", 404
-
     with open(DATA_FILE) as f:
         data = json.load(f)
-
-    pers = next((d for d in data if _norm(d['nom']) == nom and _norm(d['prenom']) == prenom), None)
+    pers = next((d for d in data if _norm(d.get('nom')) == nom and _norm(d.get('prenom')) == prenom), None)
     if not pers:
         return "Stagiaire non trouvé", 404
-
     folder = os.path.join(app.config['UPLOAD_FOLDER'], pers['folder'])
-
     photo_file = None
     for f in os.listdir(folder):
         if f.lower().startswith("photo_identite"):
             photo_file = f
             break
-
     if not photo_file:
         return "Pas de photo trouvée", 404
-
     return render_template("editphoto.html", prenom=pers['prenom'], nom=pers['nom'], folder=pers['folder'], photo=photo_file)
-
 
 @app.route('/editphoto/<prenom>/<nom>', methods=['POST'])
 def save_editphoto(prenom, nom):
     prenom, nom = _norm(unquote(prenom)), _norm(unquote(nom))
     if not os.path.exists(DATA_FILE):
         return "Données manquantes", 404
-
     with open(DATA_FILE) as f:
         data = json.load(f)
-
-    pers = next((d for d in data if _norm(d['nom']) == nom and _norm(d['prenom']) == prenom), None)
+    pers = next((d for d in data if _norm(d.get('nom')) == nom and _norm(d.get('prenom')) == prenom), None)
     if not pers:
         return "Stagiaire non trouvé", 404
-
     folder = os.path.join(app.config['UPLOAD_FOLDER'], pers['folder'])
     os.makedirs(folder, exist_ok=True)
-
     f = request.files['croppedImage']
     save_path = os.path.join(folder, "photo_identite_recadree.jpg")
     f.save(save_path)
-
-    print(f"[photo] Recadrage enregistré pour {pers['prenom']} {pers['nom']}")
     return "ok"
 
-# =====================
-#   DOCX PHOTO (recadrée si dispo)
-# =====================
+# === PHOTOSHEET DOCX ===
 @app.route('/photosheet/<prenom>/<nom>')
 def photosheet(prenom, nom):
     prenom, nom = _norm(unquote(prenom)), _norm(unquote(nom))
@@ -190,9 +161,7 @@ def photosheet(prenom, nom):
     pers = next((d for d in data if _norm(d['nom']) == nom and _norm(d['prenom']) == prenom), None)
     if not pers:
         return "Stagiaire non trouvé", 404
-
     folder = os.path.join(app.config['UPLOAD_FOLDER'], pers['folder'])
-
     recadree = os.path.join(folder, "photo_identite_recadree.jpg")
     if os.path.exists(recadree):
         photo_path = recadree
@@ -204,23 +173,29 @@ def photosheet(prenom, nom):
                 break
         if not photo_path:
             return "Aucune photo trouvée", 404
+    out = f"/mnt/data/PHOTOS_{clean_text(pers['prenom'])}_{clean_text(pers['nom'])}.docx"
+    doc = Document()
+    table = doc.add_table(rows=1, cols=1)
+    cell = table.cell(0, 0)
+    p = cell.paragraphs[0]
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    p.add_run().add_picture(photo_path, width=Mm(35), height=Mm(45))
+    p2 = cell.add_paragraph()
+    p2.add_run(f"{pers['nom']} {pers['prenom']}")
+    set_cell_border(cell, color="000000", size='8')
+    doc.save(out)
+    return send_file(out, as_attachment=True)
 
-    try:
-        out = f"/mnt/data/PHOTOS_{clean_text(pers['prenom'])}_{clean_text(pers['nom'])}.docx"
-        doc = Document()
-        table = doc.add_table(rows=1, cols=1)
-        cell = table.cell(0, 0)
-
-        p = cell.paragraphs[0]
-        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        p.add_run().add_picture(photo_path, width=Mm(35), height=Mm(45))
-
-        p2 = cell.add_paragraph()
-        p2.add_run(f"{pers['nom']} {pers['prenom']}")
-
-        set_cell_border(cell, color="000000", size='8')
-        doc.save(out)
-
-        return send_file(out, as_attachment=True)
-    except Exception as e:
-        return f"Erreur génération DOCX: {e}", 500
+# === IDPACK PDF (corrigé) ===
+@app.route('/idpack/<prenom>/<nom>')
+def idpack(prenom, nom):
+    prenom, nom = _norm(unquote(prenom)), _norm(unquote(nom))
+    if not os.path.exists(DATA_FILE):
+        return "Données manquantes", 404
+    with open(DATA_FILE) as f:
+        data = json.load(f)
+    pers = next((d for d in data if _norm(d['nom']) == nom and _norm(d['prenom']) == prenom), None)
+    if not pers:
+        return "Stagiaire non trouvé", 404
+    # 👉 ici tu mets ton code qui génère l’ID PDF comme avant
+    return f"TODO: génération ID PDF pour {pers['prenom']} {pers['nom']}"
