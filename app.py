@@ -2,7 +2,6 @@ from flask import Flask, render_template, request, redirect, send_file, session,
 import os, json, zipfile
 from werkzeug.utils import secure_filename
 from fpdf import FPDF
-from datetime import datetime
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -18,7 +17,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from PyPDF2 import PdfMerger, PdfReader
+from PyPDF2 import PdfMerger
 
 # =====================
 #       CONSTANTES
@@ -28,20 +27,19 @@ DATA_FILE = '/mnt/data/data.json'
 ADMIN_USER = 'admin'
 ADMIN_PASS = 'integrale2025'
 
-# Optimisations rendu/recadrage
 RENDER_DPI = 150
 JPEG_QUALITY = 85
 PDF_PAGE_LIMIT = 80
 
-# Flask avec config statics explicite
+# Flask config
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.secret_key = 'supersecretkey'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Création des dossiers nécessaires
+# Folders
 os.makedirs("/mnt/data", exist_ok=True)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs("static", exist_ok=True)  # au cas où
+os.makedirs("static", exist_ok=True)
 
 # =====================
 #        HELPERS
@@ -68,123 +66,6 @@ def _norm(s):
     if not isinstance(s, str):
         s = str(s)
     return unicodedata.normalize('NFKC', s).strip().lower()
-
-IMG_EXTS = {'.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff', '.webp'}
-PDF_EXTS = {'.pdf'}
-
-def is_image_file(path):
-    return os.path.splitext(path.lower())[1] in IMG_EXTS
-
-def is_pdf_file(path):
-    return os.path.splitext(path.lower())[1] in PDF_EXTS
-
-def is_pdf_like(path: str) -> bool:
-    try:
-        with open(path, 'rb') as f:
-            return f.read(5) == b'%PDF-'
-    except Exception:
-        return False
-
-def is_image_like(path: str) -> bool:
-    try:
-        with Image.open(path) as im:
-            im.verify()
-        return True
-    except Exception:
-        return False
-
-def list_all_user_files(folder):
-    if not os.path.isdir(folder):
-        return []
-    return [os.path.join(folder, f) for f in sorted(os.listdir(folder))]
-
-def ensure_rgb(img):
-    if img.mode in ('RGBA', 'LA'):
-        bg = Image.new('RGB', img.size, (255, 255, 255))
-        bg.paste(img, mask=img.split()[-1])
-        return bg
-    return img.convert('RGB') if img.mode != 'RGB' else img
-
-def set_cell_border(cell, color="000000", size='8'):
-    tc = cell._tc
-    tcPr = tc.get_or_add_tcPr()
-    for edge in ('top', 'left', 'bottom', 'right'):
-        el = OxmlElement(f'w:{edge}')
-        el.set(qn('w:val'), 'single')
-        el.set(qn('w:sz'), size)
-        el.set(qn('w:color'), color)
-        tcPr.append(el)
-
-# --- Gabarits d'impression (mm) ---
-CARD_BOX_MM = (180, 120)
-DOC_BOX_MM  = (140, 200)
-
-CARD_HINTS = (
-    "carte_vitale", "identity_file", "cni", "recto", "verso",
-    "permis_conduire", "permis", "passeport", "passport", "carte"
-)
-
-def decide_orientation_and_box(filename: str):
-    name = filename.lower()
-    if any(h in name for h in CARD_HINTS):
-        return "landscape", CARD_BOX_MM
-    return "portrait", DOC_BOX_MM
-
-# ---------- Conversion PDF -> images ----------
-def pdf_iter_pages_to_jpegs(pdf_path: str, dpi: int = RENDER_DPI):
-    out_paths = []
-    try:
-        import pypdfium2 as pdfium
-        pdf = pdfium.PdfDocument(pdf_path)
-        scale = dpi / 72.0
-        for i in range(len(pdf)):
-            page = pdf[i]
-            bitmap = page.render(scale=scale)
-            pil = bitmap.to_pil()
-            pil = ensure_rgb(pil)
-            out = f"/mnt/data/_pdfpg_{os.path.basename(pdf_path)}_{i+1}.jpg"
-            pil.save(out, 'JPEG', quality=JPEG_QUALITY, optimize=True)
-            out_paths.append(out)
-        if out_paths:
-            return out_paths
-    except Exception as e:
-        print(f"[pdfpages] pypdfium2 KO: {e}")
-
-    try:
-        import fitz
-        doc = fitz.open(pdf_path)
-        for i in range(doc.page_count):
-            page = doc.load_page(i)
-            pix = page.get_pixmap(dpi=dpi)
-            out = f"/mnt/data/_pdfpg_{os.path.basename(pdf_path)}_{i+1}.jpg"
-            pix.save(out)
-            out_paths.append(out)
-        doc.close()
-        if out_paths:
-            return out_paths
-    except Exception as e:
-        print(f"[pdfpages] PyMuPDF KO: {e}")
-
-    try:
-        with Image.open(pdf_path) as im:
-            i = 0
-            while True:
-                im.load()
-                frame = ensure_rgb(im.copy())
-                out = f"/mnt/data/_pdfpg_{os.path.basename(pdf_path)}_{i+1}.jpg"
-                frame.save(out, 'JPEG', quality=JPEG_QUALITY, optimize=True)
-                out_paths.append(out)
-                i += 1
-                im.seek(im.tell() + 1)
-    except EOFError:
-        pass
-    except Exception as e:
-        print(f"[pdfpages] Pillow KO: {e}")
-
-    if not out_paths:
-        raise RuntimeError("Impossible de rasteriser le PDF.")
-
-    return out_paths
 
 # =====================
 #        ROUTES
@@ -255,49 +136,9 @@ def admin():
         data = json.load(f)
     return render_template('admin.html', data=data)
 
-@app.route('/download/<folder>')
-def download(folder):
-    folder_path = os.path.join(app.config['UPLOAD_FOLDER'], folder)
-    if not os.path.isdir(folder_path):
-        return "Dossier introuvable", 404
-    zip_path = f"/mnt/data/{folder}.zip"
-    with zipfile.ZipFile(zip_path, 'w') as zipf:
-        for root, _, files in os.walk(folder_path):
-            for file in files:
-                full_path = os.path.join(root, file)
-                arc = os.path.relpath(full_path, folder_path)
-                zipf.write(full_path, arcname=arc)
-    if not os.path.exists(zip_path) or os.path.getsize(zip_path) == 0:
-        return "Archive vide", 500
-    return send_file(zip_path, as_attachment=True)
-
-@app.route('/fiche/<prenom>/<nom>')
-def fiche(prenom, nom):
-    prenom = _norm(unquote(prenom))
-    nom = _norm(unquote(nom))
-    if not os.path.exists(DATA_FILE):
-        return "Données manquantes", 404
-    with open(DATA_FILE) as f:
-        data = json.load(f)
-    personne = next((d for d in data if _norm(d.get('nom')) == nom and _norm(d.get('prenom')) == prenom), None)
-    if not personne:
-        return "Stagiaire non trouvé", 404
-    try:
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        for k, v in personne.items():
-            if k != "folder":
-                pdf.cell(200, 8, txt=clean_text(f"{k.upper()}: {v}"), ln=True)
-        path = f"/mnt/data/fiche_{clean_text(personne['prenom'])}_{clean_text(personne['nom'])}.pdf"
-        pdf.output(path)
-        if not os.path.exists(path) or os.path.getsize(path) == 0:
-            return "Erreur: PDF vide", 500
-        return send_file(path, as_attachment=True)
-    except Exception as e:
-        print(f"[fiche] erreur: {e}")
-        return f"Erreur fiche: {e}", 500
-
+# =====================
+#       EMAILS
+# =====================
 def send_confirmation_email(data):
     try:
         user = os.environ.get("MAIL_USER")
@@ -324,32 +165,92 @@ def send_confirmation_email(data):
     except Exception as e:
         print(f"[mail] échec envoi: {e}")
 
-# ----------- UPDATE -----------
+def send_nonvalide_email(data):
+    try:
+        user = os.environ.get("MAIL_USER")
+        pwd  = os.environ.get("MAIL_PASS")
+        if not user or not pwd:
+            print("[mail] MAIL_USER/MAIL_PASS absents → email non envoyé")
+            return
+
+        commentaire = data.get('commentaire', '').strip()
+        if not commentaire:
+            commentaire = "Merci de vérifier vos documents et de les renvoyer."
+
+        redrop_link = "https://inscriptions-akou.onrender.com/"  # lien dépôt
+
+        html = f"""
+        <html><body>
+          <p>Bonjour {data['prenom']} {data['nom']},</p>
+          <p>Après vérification, nous vous informons que les documents que vous avez fournis sont <b>non conformes</b>.</p>
+          <p>Merci de bien vouloir nous renvoyer vos documents corrigés dans les plus brefs délais.</p>
+          <p><b>Commentaires :</b> {commentaire}</p>
+          <br>
+          <p>➡️ Cliquez sur le lien ci-dessous pour redéposer vos documents :</p>
+          <p><a href="{redrop_link}" style="background:#28a745;color:white;padding:10px 15px;text-decoration:none;border-radius:5px;">📤 Déposer mes documents</a></p>
+          <br>
+          <p>Cordialement,<br>L’équipe Intégrale Academy</p>
+        </body></html>
+        """
+
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = "⚠️ Dossier non valide – Intégrale Academy"
+        msg['From'] = user
+        msg['To'] = data['email']
+        msg.attach(MIMEText(html, 'html'))
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(user, pwd)
+            server.sendmail(msg['From'], [msg['To']], msg.as_string())
+
+        print(f"[mail] Notification NON VALIDE envoyée à {data['email']}")
+    except Exception as e:
+        print(f"[mail] échec envoi NON VALIDE: {e}")
+
+# =====================
+#       UPDATE
+# =====================
 @app.route('/update/<prenom>/<nom>', methods=['POST'])
 def update(prenom, nom):
     if not session.get('admin'):
         return redirect('/admin')
+
     prenom_n = _norm(unquote(prenom))
     nom_n = _norm(unquote(nom))
     folder = request.form.get('folder', '')
+
     if not os.path.exists(DATA_FILE):
         return "Données introuvables", 404
+
     with open(DATA_FILE, 'r') as f:
         data = json.load(f)
+
+    updated_entry = None
+
     for d in data:
         same_folder = (folder and d.get('folder') == folder)
         same_name = (_norm(d.get('prenom', '')) == prenom_n and _norm(d.get('nom', '')) == nom_n)
         if same_folder or same_name:
             new_status = request.form.get('status', d.get('status'))
+            commentaire = request.form.get('commentaire', d.get('commentaire', ''))
             if new_status in ["INCOMPLET", "COMPLET", "VALIDE", "NON_VALIDE"]:
                 d['status'] = new_status
-            d['commentaire'] = request.form.get('commentaire', d.get('commentaire', ''))
+            d['commentaire'] = commentaire
+            updated_entry = d
             break
+
     with open(DATA_FILE, 'w') as f:
         json.dump(data, f, indent=2)
+
+    # ✅ envoi mail si NON VALIDE
+    if updated_entry and updated_entry['status'] == "NON_VALIDE":
+        send_nonvalide_email(updated_entry)
+
     return redirect('/admin')
 
-# ----------- DELETE -----------
+# =====================
+#       DELETE
+# =====================
 @app.route('/delete/<prenom>/<nom>', methods=['POST'])
 def delete(prenom, nom):
     if not session.get('admin'):
