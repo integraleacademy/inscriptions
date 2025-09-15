@@ -21,6 +21,17 @@
       border-radius: 5px;
       cursor: pointer;
     }
+    .status-badge {
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-weight: bold;
+      display: inline-block;
+      min-width: 100px;
+    }
+    .status-incomplet { background: #e0e0e0; color: #333; }
+    .status-complet   { background: #ffb74d; color: #fff; }
+    .status-valide    { background: #28a745; color: #fff; }
+    .status-nonvalide { background: #dc3545; color: #fff; }
   </style>
 </head>
 <body>
@@ -35,7 +46,8 @@
         <th>Nom</th>
         <th>Prénom</th>
         <th>Email</th>
-        <th colspan="4">Dossier</th>
+        <th>Statut</th>
+        <th colspan="3">Actions</th>
       </tr>
     </thead>
     <tbody>
@@ -44,7 +56,21 @@
         <td>{{ row.nom }}</td>
         <td>{{ row.prenom }}</td>
         <td>{{ row.email }}</td>
-        <td colspan="4">
+
+        <!-- Affichage du statut coloré -->
+        <td>
+          {% if row.status == 'VALIDE' %}
+            <span class="status-badge status-valide">VALIDE</span>
+          {% elif row.status == 'NON_VALIDE' %}
+            <span class="status-badge status-nonvalide">NON VALIDE</span>
+          {% elif row.status == 'COMPLET' %}
+            <span class="status-badge status-complet">COMPLET</span>
+          {% else %}
+            <span class="status-badge status-incomplet">INCOMPLET</span>
+          {% endif %}
+        </td>
+
+        <td colspan="3">
           <form method="post" action="/update/{{ row.prenom|trim|urlencode }}/{{ row.nom|trim|urlencode }}" class="actions">
             <select name="status">
               <option value="INCOMPLET" {% if row.status == 'INCOMPLET' %}selected{% endif %}>INCOMPLET</option>
@@ -54,8 +80,6 @@
             </select>
 
             <input type="text" name="commentaire" value="{{ row.commentaire }}" placeholder="Commentaire">
-
-            <!-- Identifiant dossier fiable -->
             <input type="hidden" name="folder" value="{{ row.folder }}">
 
             <a href="/download/{{ row.folder }}" class="btn download">📁 Télécharger</a>
@@ -66,7 +90,7 @@
             <button type="submit" class="btn save">💾 Enregistrer</button>
           </form>
 
-          <!-- Boutons rapides pour statut -->
+          <!-- Boutons rapides -->
           <form method="post" action="/update/{{ row.prenom|trim|urlencode }}/{{ row.nom|trim|urlencode }}" style="display:inline;">
             <input type="hidden" name="folder" value="{{ row.folder }}">
             <input type="hidden" name="status" value="VALIDE">
