@@ -32,6 +32,7 @@
             <select name="status">
               <option value="INCOMPLET" {% if row.status == 'INCOMPLET' %}selected{% endif %}>INCOMPLET</option>
               <option value="COMPLET" {% if row.status == 'COMPLET' %}selected{% endif %}>COMPLET</option>
+              <option value="NON VALIDE" {% if row.status == 'NON VALIDE' %}selected{% endif %}>NON VALIDE</option>
             </select>
 
             <!-- Commentaire -->
@@ -48,7 +49,7 @@
             <a href="/editphoto/{{ row.prenom|trim|urlencode }}/{{ row.nom|trim|urlencode }}" class="btn pdf">✂️ Recadrer Photo</a>
 
             <!-- Boutons statut -->
-            <button type="submit" name="status" value="VALIDE" class="btn valide">✔️ VALIDE</button>
+            <button type="submit" name="status" value="COMPLET" class="btn valide">✔️ VALIDE</button>
             <button type="submit" name="status" value="NON VALIDE" class="btn nonvalide">❌ NON VALIDE</button>
 
             <!-- Sauvegarde -->
