@@ -4,46 +4,6 @@
   <meta charset="UTF-8">
   <title>Admin - Intégrale Academy</title>
   <link rel="stylesheet" href="/static/css/style.css">
-  <style>
-    /* Styles généraux pour les boutons */
-    .btn, .btn-valid, .btn-invalid {
-      display: inline-block;
-      min-width: 110px;       /* largeur homogène */
-      text-align: center;
-      margin: 5px 3px;
-      font-weight: bold;
-      font-size: 14px;
-      padding: 6px 12px;
-      border-radius: 5px;
-      border: none;
-      cursor: pointer;
-      text-decoration: none;
-      color: white;
-    }
-
-    /* Boutons spécifiques */
-    .btn.download { background-color: #007bff; }   /* Bleu */
-    .btn.pdf      { background-color: #6f42c1; }   /* Violet */
-    .btn.save     { background-color: #218838; }   /* Vert foncé */
-    .btn.delete   { background-color: #c82333; }   /* Rouge foncé */
-
-    .btn-valid    { background-color: #28a745; }   /* Vert */
-    .btn-invalid  { background-color: #dc3545; }   /* Rouge */
-
-    /* Statuts colorés */
-    .status-badge {
-      padding: 5px 10px;
-      border-radius: 6px;
-      font-weight: bold;
-      display: inline-block;
-      min-width: 110px;
-      text-align: center;
-    }
-    .status-incomplet { background: #e0e0e0; color: #333; }
-    .status-complet   { background: #ffb74d; color: #fff; }
-    .status-valide    { background: #28a745; color: #fff; }
-    .status-nonvalide { background: #dc3545; color: #fff; }
-  </style>
 </head>
 <body>
   <div class="admin-header">
@@ -57,8 +17,7 @@
         <th>Nom</th>
         <th>Prénom</th>
         <th>Email</th>
-        <th>Statut</th>
-        <th colspan="3">Actions</th>
+        <th colspan="4">Dossier</th>
       </tr>
     </thead>
     <tbody>
@@ -67,56 +26,10 @@
         <td>{{ row.nom }}</td>
         <td>{{ row.prenom }}</td>
         <td>{{ row.email }}</td>
-
-        <!-- Affichage du statut coloré -->
-        <td>
-          {% if row.status == 'VALIDE' %}
-            <span class="status-badge status-valide">VALIDE</span>
-          {% elif row.status == 'NON_VALIDE' %}
-            <span class="status-badge status-nonvalide">NON VALIDE</span>
-          {% elif row.status == 'COMPLET' %}
-            <span class="status-badge status-complet">COMPLET</span>
-          {% else %}
-            <span class="status-badge status-incomplet">INCOMPLET</span>
-          {% endif %}
-        </td>
-
-        <td colspan="3">
-          <form method="post" action="/update/{{ row.prenom|trim|urlencode }}/{{ row.nom|trim|urlencode }}" class="actions">
-            <select name="status">
-              <option value="INCOMPLET" {% if row.status == 'INCOMPLET' %}selected{% endif %}>INCOMPLET</option>
-              <option value="COMPLET" {% if row.status == 'COMPLET' %}selected{% endif %}>COMPLET</option>
-              <option value="VALIDE" {% if row.status == 'VALIDE' %}selected{% endif %}>VALIDE</option>
-              <option value="NON_VALIDE" {% if row.status == 'NON_VALIDE' %}selected{% endif %}>NON VALIDE</option>
-            </select>
-
-            <input type="text" name="commentaire" value="{{ row.commentaire }}" placeholder="Commentaire">
-            <input type="hidden" name="folder" value="{{ row.folder }}">
-
-            <a href="/download/{{ row.folder }}" class="btn download">📁 Télécharger</a>
-            <a href="/fiche/{{ row.prenom|trim|urlencode }}/{{ row.nom|trim|urlencode }}" class="btn pdf">📄 Fiche PDF</a>
-            <a href="/idpack/{{ row.prenom|trim|urlencode }}/{{ row.nom|trim|urlencode }}" class="btn pdf">🪪 ID PDF</a>
-            <a href="/photosheet/{{ row.prenom|trim|urlencode }}/{{ row.nom|trim|urlencode }}" class="btn pdf">🖼️ Photo DOCX</a>
-
-            <button type="submit" class="btn save">💾 Enregistrer</button>
-          </form>
-
-          <!-- Boutons rapides -->
-          <form method="post" action="/update/{{ row.prenom|trim|urlencode }}/{{ row.nom|trim|urlencode }}" style="display:inline;">
-            <input type="hidden" name="folder" value="{{ row.folder }}">
-            <input type="hidden" name="status" value="VALIDE">
-            <button type="submit" class="btn-valid">✔️ VALIDE</button>
-          </form>
-
-          <form method="post" action="/update/{{ row.prenom|trim|urlencode }}/{{ row.nom|trim|urlencode }}" style="display:inline;">
-            <input type="hidden" name="folder" value="{{ row.folder }}">
-            <input type="hidden" name="status" value="NON_VALIDE">
-            <button type="submit" class="btn-invalid">❌ NON VALIDE</button>
-          </form>
-
-          <form method="post" action="/delete/{{ row.prenom|trim|urlencode }}/{{ row.nom|trim|urlencode }}" class="actions" style="margin-top: 10px;">
-            <button type="submit" class="btn delete">🗑️ Supprimer</button>
-          </form>
+        <td colspan="4">
+          <!-- autres boutons -->
+          <a href="/photosheet/{{ row.prenom|trim|urlencode }}/{{ row.nom|trim|urlencode }}" class="btn pdf">🖼️ Photo DOCX</a>
+          <a href="/editphoto/{{ row.prenom|trim|urlencode }}/{{ row.nom|trim|urlencode }}" class="btn pdf">✂️ Recadrer Photo</a>
         </td>
       </tr>
       {% endfor %}
