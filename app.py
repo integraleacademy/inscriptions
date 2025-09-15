@@ -29,9 +29,9 @@ ADMIN_USER = 'admin'
 ADMIN_PASS = 'integrale2025'
 
 # Optimisations rendu/recadrage
-RENDER_DPI = 150          # 150 dpi = lisible & rapide
-JPEG_QUALITY = 85         # qualité suffisante pour l’admin
-PDF_PAGE_LIMIT = 80       # sécurité anti-PDF monstres (augmente si besoin)
+RENDER_DPI = 150
+JPEG_QUALITY = 85
+PDF_PAGE_LIMIT = 80
 
 # Flask avec config statics explicite
 app = Flask(__name__, static_folder="static", static_url_path="/static")
@@ -116,8 +116,8 @@ def set_cell_border(cell, color="000000", size='8'):
         tcPr.append(el)
 
 # --- Gabarits d'impression (mm) ---
-CARD_BOX_MM = (180, 120)   # cartes: CNI, Vitale, permis, passeport...
-DOC_BOX_MM  = (140, 200)   # justificatifs/attestations (portrait)
+CARD_BOX_MM = (180, 120)
+DOC_BOX_MM  = (140, 200)
 
 CARD_HINTS = (
     "carte_vitale", "identity_file", "cni", "recto", "verso",
@@ -130,11 +130,9 @@ def decide_orientation_and_box(filename: str):
         return "landscape", CARD_BOX_MM
     return "portrait", DOC_BOX_MM
 
-# ---------- Conversion PDF -> images (toutes pages) ----------
+# ---------- Conversion PDF -> images ----------
 def pdf_iter_pages_to_jpegs(pdf_path: str, dpi: int = RENDER_DPI):
     out_paths = []
-
-    # 1) pypdfium2
     try:
         import pypdfium2 as pdfium
         pdf = pdfium.PdfDocument(pdf_path)
@@ -152,7 +150,6 @@ def pdf_iter_pages_to_jpegs(pdf_path: str, dpi: int = RENDER_DPI):
     except Exception as e:
         print(f"[pdfpages] pypdfium2 KO: {e}")
 
-    # 2) PyMuPDF (fitz)
     try:
         import fitz
         doc = fitz.open(pdf_path)
@@ -168,7 +165,6 @@ def pdf_iter_pages_to_jpegs(pdf_path: str, dpi: int = RENDER_DPI):
     except Exception as e:
         print(f"[pdfpages] PyMuPDF KO: {e}")
 
-    # 3) Pillow (Ghostscript nécessaire)
     try:
         with Image.open(pdf_path) as im:
             i = 0
@@ -186,22 +182,19 @@ def pdf_iter_pages_to_jpegs(pdf_path: str, dpi: int = RENDER_DPI):
         print(f"[pdfpages] Pillow KO: {e}")
 
     if not out_paths:
-        raise RuntimeError("Impossible de rasteriser le PDF (installe pypdfium2 ou PyMuPDF).")
+        raise RuntimeError("Impossible de rasteriser le PDF.")
 
     return out_paths
 
 # =====================
 #        ROUTES
 # =====================
-
-# Health-check ultra simple (Render -> Settings -> Health Check Path: /healthz)
 @app.route('/healthz')
 def healthz():
     return "ok", 200
 
 @app.route('/')
 def index():
-    # On évite qu’un template manquant fasse échouer le health-check/démarrage
     try:
         return render_template('index.html')
     except Exception as e:
@@ -215,13 +208,11 @@ def submit():
     person_folder = os.path.join(app.config['UPLOAD_FOLDER'], full_name)
     os.makedirs(person_folder, exist_ok=True)
 
-    # Fichiers principaux
     for field in ['photo_identite', 'carte_vitale', 'identity_file_1', 'identity_file_2']:
         f = files.get(field)
         if f and f.filename:
             f.save(os.path.join(person_folder, secure_filename(f"{field}_{f.filename}")))
 
-    # A3P si présent
     if form.get('formation') == 'A3P':
         for field in ['assurance_rc', 'certificat_medical', 'permis_conduire']:
             f = files.get(field)
@@ -291,7 +282,6 @@ def fiche(prenom, nom):
     personne = next((d for d in data if _norm(d.get('nom')) == nom and _norm(d.get('prenom')) == prenom), None)
     if not personne:
         return "Stagiaire non trouvé", 404
-
     try:
         pdf = FPDF()
         pdf.add_page()
@@ -299,7 +289,6 @@ def fiche(prenom, nom):
         for k, v in personne.items():
             if k != "folder":
                 pdf.cell(200, 8, txt=clean_text(f"{k.upper()}: {v}"), ln=True)
-
         path = f"/mnt/data/fiche_{clean_text(personne['prenom'])}_{clean_text(personne['nom'])}.pdf"
         pdf.output(path)
         if not os.path.exists(path) or os.path.getsize(path) == 0:
@@ -335,50 +324,42 @@ def send_confirmation_email(data):
     except Exception as e:
         print(f"[mail] échec envoi: {e}")
 
-# ----------- UPDATE (tolérant + ciblage par folder) -----------
+# ----------- UPDATE -----------
 @app.route('/update/<prenom>/<nom>', methods=['POST'])
 def update(prenom, nom):
     if not session.get('admin'):
         return redirect('/admin')
-
     prenom_n = _norm(unquote(prenom))
     nom_n = _norm(unquote(nom))
     folder = request.form.get('folder', '')
-
     if not os.path.exists(DATA_FILE):
         return "Données introuvables", 404
-
     with open(DATA_FILE, 'r') as f:
         data = json.load(f)
-
     for d in data:
         same_folder = (folder and d.get('folder') == folder)
         same_name = (_norm(d.get('prenom', '')) == prenom_n and _norm(d.get('nom', '')) == nom_n)
         if same_folder or same_name:
-            d['status'] = request.form.get('status', d.get('status'))
+            new_status = request.form.get('status', d.get('status'))
+            if new_status in ["INCOMPLET", "COMPLET", "VALIDE", "NON_VALIDE"]:
+                d['status'] = new_status
             d['commentaire'] = request.form.get('commentaire', d.get('commentaire', ''))
             break
-
     with open(DATA_FILE, 'w') as f:
         json.dump(data, f, indent=2)
-
     return redirect('/admin')
 
-# ----------- DELETE (tolérant + robustesse FS) -----------
+# ----------- DELETE -----------
 @app.route('/delete/<prenom>/<nom>', methods=['POST'])
 def delete(prenom, nom):
     if not session.get('admin'):
         return redirect('/admin')
-
     prenom_n = _norm(unquote(prenom))
     nom_n = _norm(unquote(nom))
-
     if not os.path.exists(DATA_FILE):
         return redirect('/admin')
-
     with open(DATA_FILE, 'r') as f:
         data = json.load(f)
-
     new_data = []
     for d in data:
         if _norm(d.get('prenom', '')) == prenom_n and _norm(d.get('nom', '')) == nom_n:
@@ -391,345 +372,6 @@ def delete(prenom, nom):
                     print(f"[delete] Impossible de supprimer {folder_path}: {e}")
         else:
             new_data.append(d)
-
     with open(DATA_FILE, 'w') as f:
         json.dump(new_data, f, indent=2)
-
     return redirect('/admin')
-
-# ==========================================
-#      IMAGE -> page A4 encadrée (fit)
-# ==========================================
-def image_to_uniform_pdf_page(image_path, out_pdf_path, orientation="landscape", box_mm=(180,120)):
-    """
-    Recadre une image dans une boîte sur A4 (cadre léger), en limitant CPU/RAM.
-    """
-    w_mm, h_mm = box_mm
-    A4_W, A4_H = 210, 297
-    X, Y = (A4_W - w_mm) / 2.0, (A4_H - h_mm) / 2.0
-    # ~200 dpi sur la zone utile
-    target_px_w, target_px_h = int(w_mm * 8), int(h_mm * 8)
-
-    with Image.open(image_path) as im:
-        im = ImageOps.exif_transpose(im)
-        im = ensure_rgb(im)
-
-        if orientation == "landscape" and im.height > im.width:
-            im = im.rotate(90, expand=True)
-        elif orientation == "portrait" and im.width > im.height:
-            im = im.rotate(90, expand=True)
-
-        scale = min(target_px_w / im.width, target_px_h / im.height)
-        new_w, new_h = max(1, int(im.width * scale)), max(1, int(im.height * scale))
-        im_resized = im.resize((new_w, new_h), Image.LANCZOS)
-
-        canvas = Image.new('RGB', (target_px_w, target_px_h), (255,255,255))
-        off_x, off_y = (target_px_w - new_w) // 2, (target_px_h - new_h) // 2
-        canvas.paste(im_resized, (off_x, off_y))
-
-        bio = BytesIO()
-        canvas.save(bio, format='JPEG', quality=JPEG_QUALITY, optimize=True)
-        bio.seek(0)
-
-    tmp = f"/mnt/data/_tmp_{os.path.basename(image_path)}.jpg"
-    with open(tmp, 'wb') as f:
-        f.write(bio.read())
-
-    pdf = FPDF(unit='mm', format='A4')
-    pdf.add_page()
-    pdf.set_draw_color(200, 200, 200)
-    pdf.rect(X, Y, w_mm, h_mm)
-    pdf.image(tmp, x=X, y=Y, w=w_mm, h=h_mm)
-    pdf.output(out_pdf_path)
-
-    try:
-        os.remove(tmp)
-    except:
-        pass
-
-# ==========================================
-#     PDF "TOUS LES DOCS SAUF LA PHOTO"
-#     (images + PDF -> recadrés A4, stream)
-# ==========================================
-def build_all_docs_pdf(folder, out_pdf):
-    """
-    Recadre TOUT (images + PDF) en A4 via une boîte, en traitant page par page
-    pour limiter CPU/RAM et éviter les timeouts.
-    """
-    files = list_all_user_files(folder)
-    files = [p for p in files if not os.path.basename(p).lower().startswith('photo_identite')]
-
-    if not files:
-        raise FileNotFoundError("Aucun document trouvé (hors photo).")
-
-    merger = PdfMerger()
-
-    # === 1) IMAGES d'abord (rapide) ===
-    for p in files:
-        if not is_image_like(p):
-            continue
-        base = os.path.basename(p)
-        orientation, box_mm = decide_orientation_and_box(base)
-        tmp_pdf = None
-        try:
-            tmp_pdf = f"/mnt/data/_p_img_{base}.pdf"
-            image_to_uniform_pdf_page(p, tmp_pdf, orientation=orientation, box_mm=box_mm)
-            merger.append(tmp_pdf)
-        except Exception as e:
-            print(f"[idpack] image ignorée {p}: {e}")
-        finally:
-            if tmp_pdf:
-                try: os.remove(tmp_pdf)
-                except: pass
-
-    # === 2) Puis les PDF (page par page) ===
-    for p in files:
-        if not is_pdf_like(p):
-            continue
-        base = os.path.basename(p)
-        orientation, box_mm = decide_orientation_and_box(base)
-
-        used_pages = 0
-        rendered_any = False
-
-        # --- pypdfium2 ---
-        try:
-            import pypdfium2 as pdfium
-            pdf = pdfium.PdfDocument(p)
-            scale = RENDER_DPI / 72.0
-            page_count = len(pdf)
-            for i in range(page_count):
-                if used_pages >= PDF_PAGE_LIMIT:
-                    print(f"[idpack] limite pages atteinte ({PDF_PAGE_LIMIT}) pour {base}")
-                    break
-                page = pdf[i]
-                bitmap = page.render(scale=scale)
-                pil = bitmap.to_pil()
-                pil = ensure_rgb(pil)
-
-                tmp_img = f"/mnt/data/_pdfpg_{base}_{i+1}.jpg"
-                pil.save(tmp_img, 'JPEG', quality=JPEG_QUALITY, optimize=True)
-
-                tmp_pdf = f"/mnt/data/_p_{base}_{i+1}.pdf"
-                image_to_uniform_pdf_page(tmp_img, tmp_pdf, orientation=orientation, box_mm=box_mm)
-                merger.append(tmp_pdf)
-
-                # nettoyage
-                try: os.remove(tmp_img)
-                except: pass
-                try: os.remove(tmp_pdf)
-                except: pass
-
-                used_pages += 1
-                rendered_any = True
-
-            if rendered_any:
-                continue
-        except Exception as e:
-            print(f"[idpack] pypdfium2 KO pour {base}: {e}")
-
-        # --- PyMuPDF (fitz) fallback ---
-        try:
-            import fitz
-            doc = fitz.open(p)
-            page_count = doc.page_count
-            for i in range(page_count):
-                if used_pages >= PDF_PAGE_LIMIT:
-                    print(f"[idpack] limite pages atteinte ({PDF_PAGE_LIMIT}) pour {base}")
-                    break
-                page = doc.load_page(i)
-                pix = page.get_pixmap(dpi=RENDER_DPI)
-                tmp_img = f"/mnt/data/_pdfpg_{base}_{i+1}.jpg"
-                pix.save(tmp_img)
-
-                tmp_pdf = f"/mnt/data/_p_{base}_{i+1}.pdf"
-                image_to_uniform_pdf_page(tmp_img, tmp_pdf, orientation=orientation, box_mm=box_mm)
-                merger.append(tmp_pdf)
-
-                try: os.remove(tmp_img)
-                except: pass
-                try: os.remove(tmp_pdf)
-                except: pass
-
-                used_pages += 1
-                rendered_any = True
-            doc.close()
-
-            if rendered_any:
-                continue
-        except Exception as e:
-            print(f"[idpack] PyMuPDF KO pour {base}: {e}")
-
-        # --- Dernier recours : Pillow ---
-        try:
-            with Image.open(p) as im:
-                idx = 0
-                while True:
-                    if used_pages >= PDF_PAGE_LIMIT:
-                        print(f"[idpack] limite pages atteinte ({PDF_PAGE_LIMIT}) pour {base}")
-                        break
-                    im.load()
-                    frame = ensure_rgb(im.copy())
-                    tmp_img = f"/mnt/data/_pdfpg_{base}_{idx+1}.jpg"
-                    frame.save(tmp_img, 'JPEG', quality=JPEG_QUALITY, optimize=True)
-
-                    tmp_pdf = f"/mnt/data/_p_{base}_{idx+1}.pdf"
-                    image_to_uniform_pdf_page(tmp_img, tmp_pdf, orientation=orientation, box_mm=box_mm)
-                    merger.append(tmp_pdf)
-
-                    try: os.remove(tmp_img)
-                    except: pass
-                    try: os.remove(tmp_pdf)
-                    except: pass
-
-                    idx += 1
-                    used_pages += 1
-                    im.seek(im.tell() + 1)
-        except EOFError:
-            pass
-        except Exception as e:
-            print(f"[idpack] Impossible de rasteriser {base}: {e}")
-
-    merger.write(out_pdf)
-    merger.close()
-
-@app.route('/idpack/<prenom>/<nom>')
-def idpack(prenom, nom):
-    prenom, nom = _norm(unquote(prenom)), _norm(unquote(nom))
-    if not os.path.exists(DATA_FILE):
-        return "Données manquantes", 404
-    with open(DATA_FILE) as f:
-        data = json.load(f)
-    pers = next((d for d in data if _norm(d['nom']) == nom and _norm(d['prenom']) == prenom), None)
-    if not pers:
-        return "Stagiaire non trouvé", 404
-    folder = os.path.join(app.config['UPLOAD_FOLDER'], pers['folder'])
-    out = f"/mnt/data/IDs_{clean_text(pers['prenom'])}_{clean_text(pers['nom'])}.pdf"
-    try:
-        build_all_docs_pdf(folder, out)
-    except Exception as e:
-        return f"Erreur génération PDF: {e}", 500
-    if not os.path.exists(out) or os.path.getsize(out) == 0:
-        return "Erreur: PDF vide", 500
-    return send_file(out, as_attachment=True)
-
-# ==========================================
-#     DOCX "PHOTO D'IDENTITÉ" (1 seule)
-# ==========================================
-def prepare_portrait_photo(src, out):
-    with Image.open(src) as im:
-        im = ImageOps.exif_transpose(im)
-        im = ensure_rgb(im)
-        if im.width > im.height:
-            im = im.rotate(90, expand=True)
-        im.save(out, 'JPEG', quality=JPEG_QUALITY, optimize=True)
-
-def build_single_photo_docx(photo, full_name, out_docx):
-    PHOTO_W, PHOTO_H = 35, 45  # mm
-    doc = Document()
-    table = doc.add_table(rows=1, cols=1)
-    table.alignment = WD_TABLE_ALIGNMENT.LEFT
-    cell = table.cell(0, 0)
-
-    p = cell.paragraphs[0]
-    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    p.add_run().add_picture(photo, width=Mm(PHOTO_W), height=Mm(PHOTO_H))
-
-    p2 = cell.add_paragraph()
-    p2.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    p2.add_run(full_name)
-
-    set_cell_border(cell, color="000000", size='8')
-    doc.save(out_docx)
-
-def find_photo_candidate_strict(person_folder):
-    if not os.path.isdir(person_folder):
-        return None
-    files = sorted(os.listdir(person_folder))
-    for f in files:
-        if f.lower().startswith('photo_identite'):
-            p = os.path.join(person_folder, f)
-            if is_image_like(p) or is_pdf_like(p):
-                return p
-    return None
-
-def find_photo_candidate_fallback(person_folder):
-    if not os.path.isdir(person_folder):
-        return None
-    files = sorted(os.listdir(person_folder))
-
-    KEYS = ('photo', 'identite', 'identity', 'id', 'portrait', 'visage')
-    for f in files:
-        lf = f.lower()
-        if any(k in lf for k in KEYS):
-            p = os.path.join(person_folder, f)
-            if is_image_like(p) or is_pdf_like(p):
-                return p
-
-    for f in files:
-        p = os.path.join(person_folder, f)
-        if is_image_like(p):
-            try:
-                with Image.open(p) as im:
-                    if im.height >= im.width:
-                        return p
-            except Exception:
-                pass
-
-    for f in files:
-        p = os.path.join(person_folder, f)
-        if is_pdf_like(p):
-            return p
-    return None
-
-@app.route('/photosheet/<prenom>/<nom>')
-def photosheet(prenom, nom):
-    prenom, nom = _norm(unquote(prenom)), _norm(unquote(nom))
-    if not os.path.exists(DATA_FILE):
-        return "Données manquantes", 404
-    with open(DATA_FILE) as f:
-        data = json.load(f)
-    pers = next((d for d in data if _norm(d['nom']) == nom and _norm(d['prenom']) == prenom), None)
-    if not pers:
-        return "Stagiaire non trouvé", 404
-
-    folder = os.path.join(app.config['UPLOAD_FOLDER'], pers['folder'])
-
-    cand_path = find_photo_candidate_strict(folder)
-    if not cand_path:
-        cand_path = find_photo_candidate_fallback(folder)
-    if not cand_path:
-        try:
-            print(f"[photosheet] Aucun fichier photo dans {folder}. Contenu: {os.listdir(folder) if os.path.isdir(folder) else 'N/A'}")
-        except Exception as e:
-            print(f"[photosheet] Impossible de lister {folder}: {e}")
-        return "Aucune photo d'identité trouvée pour ce dossier.", 404
-
-    tmp_source_img = None
-    tmp_portrait = None
-    try:
-        source_for_prepare = cand_path
-        if is_pdf_like(cand_path):
-            imgs = pdf_iter_pages_to_jpegs(cand_path, dpi=RENDER_DPI)
-            if not imgs:
-                return "Impossible de convertir le PDF de la photo.", 500
-            tmp_source_img = imgs[0]
-            for extra in imgs[1:]:
-                try: os.remove(extra)
-                except: pass
-            source_for_prepare = tmp_source_img
-
-        tmp_portrait = f"/mnt/data/_tmp_photo_{os.path.basename(source_for_prepare)}.jpg"
-        prepare_portrait_photo(source_for_prepare, tmp_portrait)
-
-        out = f"/mnt/data/PHOTOS_{clean_text(pers['prenom'])}_{clean_text(pers['nom'])}.docx"
-        full_name = f"{pers['nom']} {pers['prenom']}"
-        build_single_photo_docx(tmp_portrait, full_name, out)
-        if not os.path.exists(out) or os.path.getsize(out) == 0:
-            return "Erreur: DOCX vide", 500
-        return send_file(out, as_attachment=True)
-    finally:
-        for pth in (tmp_source_img, tmp_portrait):
-            if pth and os.path.exists(pth):
-                try: os.remove(pth)
-                except: pass
