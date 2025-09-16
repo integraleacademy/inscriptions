@@ -28,7 +28,7 @@
         <td>{{ row.email }}</td>
         <td colspan="4">
           <form method="post" action="/update/{{ row.prenom }}/{{ row.nom }}" class="actions">
-            <select name="status">
+            <select name="status_select">
               <option value="INCOMPLET" {% if row.status == 'INCOMPLET' %}selected{% endif %}>INCOMPLET</option>
               <option value="COMPLET" {% if row.status == 'COMPLET' %}selected{% endif %}>COMPLET</option>
               <option value="CONFORME" {% if row.status == 'CONFORME' %}selected{% endif %}>CONFORME</option>
