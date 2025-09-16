@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, send_file, session, url_for
+from flask import Flask, render_template, request, redirect, send_file, session, url_for, flash
 import os, json, zipfile
 from werkzeug.utils import secure_filename
 from fpdf import FPDF
@@ -190,8 +190,6 @@ def send_confirmation_email(data):
         html = f"""{html_email_content.replace('{prenom}', data['prenom'])}"""
         msg.attach(MIMEText(html, 'html'))
 
-        print(f"DEBUG: Tentative d’envoi mail confirmation à {data['email']}...")
-
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
             server.sendmail(msg['From'], [msg['To']], msg.as_string())
@@ -205,8 +203,6 @@ def send_confirmation_email(data):
             "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         })
 
-        print(f"✅ Mail de confirmation envoyé à {data['email']}")
-
     except Exception as e:
         print(f"❌ Erreur envoi mail confirmation: {str(e)}")
 
@@ -214,24 +210,25 @@ def send_non_conforme_email(data):
     try:
         html_email_content = f"""
         <html>
-          <body>
-            <p>Bonjour {data['prenom']},</p>
-            <p>Après vérification, les documents fournis ne sont <b>pas conformes</b>. 
-            Merci de bien vouloir refaire une demande en utilisant le lien ci-dessous :</p>
-            <p><a href="https://inscriptions-akou.onrender.com/">Refaire ma demande</a></p>
-            <p><b>Commentaire :</b> {data.get('commentaire', 'Aucun')}</p>
-            <br>
-            <p>Cordialement,<br>L’équipe Intégrale Academy</p>
+          <body style="font-family: Arial, sans-serif; color:#333;">
+            <div style="border:2px solid #e74c3c; padding:15px; border-radius:10px;">
+              <h2 style="color:#e74c3c;">❌ Documents non conformes</h2>
+              <p>Bonjour {data['prenom']},</p>
+              <p>Après vérification, les documents que vous avez transmis sont <b style="color:#e74c3c;">non conformes</b>.</p>
+              <p>👉 Merci de bien vouloir refaire une demande en cliquant sur le lien ci-dessous :</p>
+              <p><a href="https://inscriptions-akou.onrender.com/" style="background:#27ae60;color:white;padding:10px 15px;border-radius:5px;text-decoration:none;">🔗 Refaire ma demande</a></p>
+              <p><b>📝 Commentaire :</b> {data.get('commentaire', 'Aucun')}</p>
+              <br>
+              <p>📩 L’équipe <b>Intégrale Academy</b> reste à votre disposition.</p>
+            </div>
           </body>
         </html>
         """
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = "Documents non conformes – Intégrale Academy"
+        msg['Subject'] = "❌ Documents non conformes – Intégrale Academy"
         msg['From'] = os.environ.get("MAIL_USER")
         msg['To'] = data['email']
         msg.attach(MIMEText(html_email_content, 'html'))
-
-        print(f"DEBUG: Tentative d’envoi mail NON CONFORME à {data['email']}...")
 
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
@@ -245,8 +242,6 @@ def send_non_conforme_email(data):
             "content": html_email_content,
             "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         })
-
-        print(f"✅ Mail NON CONFORME envoyé à {data['email']}")
 
     except Exception as e:
         print(f"❌ Erreur envoi mail NON CONFORME: {str(e)}")
@@ -262,7 +257,6 @@ def update(prenom, nom):
     with open(DATA_FILE, 'r') as f:
         data = json.load(f)
 
-    # On prend d’abord la valeur du bouton (status) sinon celle du select
     status_value = request.form.get('status') or request.form.get('status_select')
     commentaire_value = request.form.get('commentaire')
 
@@ -271,10 +265,9 @@ def update(prenom, nom):
             d['status'] = status_value
             d['commentaire'] = commentaire_value
 
-            print(f"DEBUG: Mise à jour statut {prenom} {nom} → {status_value}")
-
             if status_value == "NON CONFORME":
                 send_non_conforme_email(d)
+                flash(f"📧 Demande de mise en conformité envoyée à {d['email']}", "success")
 
     with open(DATA_FILE, 'w') as f:
         json.dump(data, f, indent=2)
