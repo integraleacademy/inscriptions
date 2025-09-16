@@ -10,6 +10,7 @@ import unicodedata
 
 UPLOAD_FOLDER = '/mnt/data/uploads'
 DATA_FILE = '/mnt/data/data.json'
+MAIL_LOG = '/mnt/data/mails_envoyes.json'
 ADMIN_USER = 'admin'
 ADMIN_PASS = 'integrale2025'
 
@@ -34,6 +35,17 @@ def save_data(entry):
     data.append(entry)
     with open(DATA_FILE, 'w') as f:
         json.dump(data, f, indent=2)
+
+def log_mail(entry):
+    """Sauvegarde une trace du mail envoyé"""
+    if os.path.exists(MAIL_LOG):
+        with open(MAIL_LOG, 'r') as f:
+            mails = json.load(f)
+    else:
+        mails = []
+    mails.append(entry)
+    with open(MAIL_LOG, 'w') as f:
+        json.dump(mails, f, indent=2)
 
 @app.route('/')
 def index():
@@ -66,8 +78,6 @@ def submit():
             path = os.path.join(person_folder, filename)
             f.save(path)
             saved_files.append(path)
-
-
 
     if form.get('formation') == 'A3P':
         a3p_files = {
@@ -182,6 +192,48 @@ def send_confirmation_email(data):
         server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
         server.sendmail(msg['From'], [msg['To']], msg.as_string())
 
+    log_mail({
+        "prenom": data['prenom'],
+        "nom": data['nom'],
+        "to": data['email'],
+        "subject": msg['Subject'],
+        "content": html,
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+
+def send_non_conforme_email(data):
+    html_email_content = f"""
+    <html>
+      <body>
+        <p>Bonjour {data['prenom']},</p>
+        <p>Après vérification, les documents fournis ne sont <b>pas conformes</b>. 
+        Merci de bien vouloir refaire une demande en utilisant le lien ci-dessous :</p>
+        <p><a href="https://inscriptions-akou.onrender.com/">Refaire ma demande</a></p>
+        <p><b>Commentaire :</b> {data.get('commentaire', 'Aucun')}</p>
+        <br>
+        <p>Cordialement,<br>L’équipe Intégrale Academy</p>
+      </body>
+    </html>
+    """
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = "Documents non conformes – Intégrale Academy"
+    msg['From'] = os.environ.get("MAIL_USER")
+    msg['To'] = data['email']
+    msg.attach(MIMEText(html_email_content, 'html'))
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
+        server.sendmail(msg['From'], [msg['To']], msg.as_string())
+
+    log_mail({
+        "prenom": data['prenom'],
+        "nom": data['nom'],
+        "to": data['email'],
+        "subject": msg['Subject'],
+        "content": html_email_content,
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+
 @app.route('/update/<prenom>/<nom>', methods=['POST'])
 def update(prenom, nom):
     if not session.get('admin'):
@@ -197,6 +249,9 @@ def update(prenom, nom):
         if d['prenom'] == prenom and d['nom'] == nom:
             d['status'] = request.form.get('status')
             d['commentaire'] = request.form.get('commentaire')
+
+            if d['status'] == "NON CONFORME":
+                send_non_conforme_email(d)
 
     with open(DATA_FILE, 'w') as f:
         json.dump(data, f, indent=2)
@@ -228,3 +283,24 @@ def delete(prenom, nom):
         json.dump(new_data, f, indent=2)
 
     return redirect('/admin')
+
+@app.route('/mail/<prenom>/<nom>')
+def voir_mail(prenom, nom):
+    if not os.path.exists(MAIL_LOG):
+        return "Aucun mail envoyé"
+
+    with open(MAIL_LOG, 'r') as f:
+        mails = json.load(f)
+
+    mails_personne = [m for m in mails if m['prenom'] == prenom and m['nom'] == nom]
+    if not mails_personne:
+        return f"Aucun mail trouvé pour {prenom} {nom}"
+
+    dernier_mail = mails_personne[-1]
+    return f"""
+    <h2>Mail envoyé à {dernier_mail['to']}</h2>
+    <p><b>Date :</b> {dernier_mail['date']}</p>
+    <p><b>Sujet :</b> {dernier_mail['subject']}</p>
+    <hr>
+    {dernier_mail['content']}
+    """
