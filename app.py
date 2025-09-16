@@ -171,68 +171,85 @@ def fiche(prenom, nom):
     return send_file(path, as_attachment=True)
 
 def send_confirmation_email(data):
-    html_email_content = """
-    <html>
-      <body>
-        <p>Bonjour {prenom},</p>
-        <p>Nous vous confirmons la bonne réception de votre dossier. L’équipe d’Intégrale Academy vous remercie.</p>
-        <p>Nous restons disponibles pour toute question complémentaire.</p>
-        <br>
-        <p>Cordialement,<br>L’équipe Intégrale Academy</p>
-      </body>
-    </html>
-    """
-    msg = MIMEMultipart('alternative')
-    msg['Subject'] = "Confirmation de dépôt de dossier – Intégrale Academy"
-    msg['From'] = os.environ.get("MAIL_USER")
-    msg['To'] = data['email']
-    html = f"""{html_email_content.replace('{prenom}', data['prenom'])}"""
-    msg.attach(MIMEText(html, 'html'))
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
-        server.sendmail(msg['From'], [msg['To']], msg.as_string())
+    try:
+        html_email_content = """
+        <html>
+          <body>
+            <p>Bonjour {prenom},</p>
+            <p>Nous vous confirmons la bonne réception de votre dossier. L’équipe d’Intégrale Academy vous remercie.</p>
+            <p>Nous restons disponibles pour toute question complémentaire.</p>
+            <br>
+            <p>Cordialement,<br>L’équipe Intégrale Academy</p>
+          </body>
+        </html>
+        """
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = "Confirmation de dépôt de dossier – Intégrale Academy"
+        msg['From'] = os.environ.get("MAIL_USER")
+        msg['To'] = data['email']
+        html = f"""{html_email_content.replace('{prenom}', data['prenom'])}"""
+        msg.attach(MIMEText(html, 'html'))
 
-    log_mail({
-        "prenom": data['prenom'],
-        "nom": data['nom'],
-        "to": data['email'],
-        "subject": msg['Subject'],
-        "content": html,
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    })
+        print(f"DEBUG: Tentative d’envoi mail confirmation à {data['email']}...")
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
+            server.sendmail(msg['From'], [msg['To']], msg.as_string())
+
+        log_mail({
+            "prenom": data['prenom'],
+            "nom": data['nom'],
+            "to": data['email'],
+            "subject": msg['Subject'],
+            "content": html,
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        })
+
+        print(f"✅ Mail de confirmation envoyé à {data['email']}")
+
+    except Exception as e:
+        print(f"❌ Erreur envoi mail confirmation: {str(e)}")
 
 def send_non_conforme_email(data):
-    html_email_content = f"""
-    <html>
-      <body>
-        <p>Bonjour {data['prenom']},</p>
-        <p>Après vérification, les documents fournis ne sont <b>pas conformes</b>. 
-        Merci de bien vouloir refaire une demande en utilisant le lien ci-dessous :</p>
-        <p><a href="https://inscriptions-akou.onrender.com/">Refaire ma demande</a></p>
-        <p><b>Commentaire :</b> {data.get('commentaire', 'Aucun')}</p>
-        <br>
-        <p>Cordialement,<br>L’équipe Intégrale Academy</p>
-      </body>
-    </html>
-    """
-    msg = MIMEMultipart('alternative')
-    msg['Subject'] = "Documents non conformes – Intégrale Academy"
-    msg['From'] = os.environ.get("MAIL_USER")
-    msg['To'] = data['email']
-    msg.attach(MIMEText(html_email_content, 'html'))
+    try:
+        html_email_content = f"""
+        <html>
+          <body>
+            <p>Bonjour {data['prenom']},</p>
+            <p>Après vérification, les documents fournis ne sont <b>pas conformes</b>. 
+            Merci de bien vouloir refaire une demande en utilisant le lien ci-dessous :</p>
+            <p><a href="https://inscriptions-akou.onrender.com/">Refaire ma demande</a></p>
+            <p><b>Commentaire :</b> {data.get('commentaire', 'Aucun')}</p>
+            <br>
+            <p>Cordialement,<br>L’équipe Intégrale Academy</p>
+          </body>
+        </html>
+        """
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = "Documents non conformes – Intégrale Academy"
+        msg['From'] = os.environ.get("MAIL_USER")
+        msg['To'] = data['email']
+        msg.attach(MIMEText(html_email_content, 'html'))
 
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
-        server.sendmail(msg['From'], [msg['To']], msg.as_string())
+        print(f"DEBUG: Tentative d’envoi mail NON CONFORME à {data['email']}...")
 
-    log_mail({
-        "prenom": data['prenom'],
-        "nom": data['nom'],
-        "to": data['email'],
-        "subject": msg['Subject'],
-        "content": html_email_content,
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    })
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
+            server.sendmail(msg['From'], [msg['To']], msg.as_string())
+
+        log_mail({
+            "prenom": data['prenom'],
+            "nom": data['nom'],
+            "to": data['email'],
+            "subject": msg['Subject'],
+            "content": html_email_content,
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        })
+
+        print(f"✅ Mail NON CONFORME envoyé à {data['email']}")
+
+    except Exception as e:
+        print(f"❌ Erreur envoi mail NON CONFORME: {str(e)}")
 
 @app.route('/update/<prenom>/<nom>', methods=['POST'])
 def update(prenom, nom):
@@ -245,12 +262,17 @@ def update(prenom, nom):
     with open(DATA_FILE, 'r') as f:
         data = json.load(f)
 
+    status_value = request.form.get('status')
+    commentaire_value = request.form.get('commentaire')
+
     for d in data:
         if d['prenom'] == prenom and d['nom'] == nom:
-            d['status'] = request.form.get('status')
-            d['commentaire'] = request.form.get('commentaire')
+            d['status'] = status_value
+            d['commentaire'] = commentaire_value
 
-            if d['status'] == "NON CONFORME":
+            print(f"DEBUG: Mise à jour statut {prenom} {nom} → {status_value}")
+
+            if status_value == "NON CONFORME":
                 send_non_conforme_email(d)
 
     with open(DATA_FILE, 'w') as f:
