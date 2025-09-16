@@ -31,14 +31,19 @@
             <select name="status">
               <option value="INCOMPLET" {% if row.status == 'INCOMPLET' %}selected{% endif %}>INCOMPLET</option>
               <option value="COMPLET" {% if row.status == 'COMPLET' %}selected{% endif %}>COMPLET</option>
+              <option value="CONFORME" {% if row.status == 'CONFORME' %}selected{% endif %}>CONFORME</option>
+              <option value="NON CONFORME" {% if row.status == 'NON CONFORME' %}selected{% endif %}>NON CONFORME</option>
             </select>
 
             <input type="text" name="commentaire" value="{{ row.commentaire }}" placeholder="Commentaire">
 
             <a href="/download/{{ row.folder }}" class="btn download">📁 Télécharger</a>
             <a href="/fiche/{{ row.prenom }}/{{ row.nom }}" class="btn pdf">📄 Fiche PDF</a>
+            <a href="/mail/{{ row.prenom }}/{{ row.nom }}" class="btn" style="background:#007bff;color:white;">📧 Voir mail</a>
 
             <button type="submit" class="btn save">💾 Enregistrer</button>
+            <button type="submit" name="status" value="CONFORME" class="btn" style="background:green;color:white;">✔️ Conforme</button>
+            <button type="submit" name="status" value="NON CONFORME" class="btn" style="background:red;color:white;">❌ Non Conforme</button>
           </form>
 
           <form method="post" action="/delete/{{ row.prenom }}/{{ row.nom }}" class="actions" style="margin-top: 10px;">
