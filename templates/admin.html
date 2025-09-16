@@ -11,6 +11,17 @@
     <h1>Interface Admin - Intégrale Academy</h1>
   </div>
 
+  <!-- Messages flash -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div style="margin:15px; padding:10px; border-radius:5px; background:#d4edda; color:#155724; border:1px solid #c3e6cb;">
+        {% for category, message in messages %}
+          <p>{{ message }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
   <table>
     <thead>
       <tr>
