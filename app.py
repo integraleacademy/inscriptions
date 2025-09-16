@@ -262,7 +262,8 @@ def update(prenom, nom):
     with open(DATA_FILE, 'r') as f:
         data = json.load(f)
 
-    status_value = request.form.get('status')
+    # On prend d’abord la valeur du bouton (status) sinon celle du select
+    status_value = request.form.get('status') or request.form.get('status_select')
     commentaire_value = request.form.get('commentaire')
 
     for d in data:
