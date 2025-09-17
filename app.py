@@ -215,9 +215,10 @@ def send_non_conforme_email(data):
               <h2 style="color:#e74c3c;">❌ Documents non conformes</h2>
               <p>Bonjour {data['prenom']},</p>
               <p>Après vérification, les documents que vous avez transmis sont <b style="color:#e74c3c;">non conformes</b>.</p>
+              <p><b>📝 Commentaire :</b> {data.get('commentaire', 'Aucun')}</p>
               <p>👉 Merci de bien vouloir refaire une demande en cliquant sur le lien ci-dessous :</p>
               <p><a href="https://inscriptions-akou.onrender.com/" style="background:#27ae60;color:white;padding:10px 15px;border-radius:5px;text-decoration:none;">🔗 Refaire ma demande</a></p>
-              <p><b>📝 Commentaire :</b> {data.get('commentaire', 'Aucun')}</p>
+              
               <br>
               <p>📩 L’équipe <b>Intégrale Academy</b> reste à votre disposition.</p>
             </div>
