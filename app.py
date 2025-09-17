@@ -7,6 +7,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import unicodedata
+import shutil
 
 UPLOAD_FOLDER = '/mnt/data/uploads'
 DATA_FILE = '/mnt/data/data.json'
@@ -19,6 +20,11 @@ app.secret_key = 'supersecretkey'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# --- Normalisation des textes ---
+def normalize(s):
+    s = s.strip().lower().replace("__", " ").replace("_", " ")
+    return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
 
 def clean_text(text):
     """Nettoie les caractères non supportés par fpdf (latin-1)"""
@@ -92,6 +98,7 @@ def submit():
                 full_path = os.path.join(person_folder, renamed)
                 f.save(full_path)
                 saved_files.append(full_path)
+
     entry = {
         "nom": nom,
         "prenom": prenom,
@@ -154,7 +161,8 @@ def fiche(prenom, nom):
         return "Données manquantes"
     with open(DATA_FILE) as f:
         data = json.load(f)
-    personne = next((d for d in data if d['nom'] == nom and d['prenom'] == prenom), None)
+
+    personne = next((d for d in data if normalize(d['nom']) == normalize(nom) and normalize(d['prenom']) == normalize(prenom)), None)
     if not personne:
         return "Stagiaire non trouvé"
 
@@ -262,7 +270,7 @@ def update(prenom, nom):
     commentaire_value = request.form.get('commentaire')
 
     for d in data:
-        if d['prenom'] == prenom and d['nom'] == nom:
+        if normalize(d['prenom']) == normalize(prenom) and normalize(d['nom']) == normalize(nom):
             d['status'] = status_value
             d['commentaire'] = commentaire_value
 
@@ -288,10 +296,9 @@ def delete(prenom, nom):
 
     new_data = []
     for d in data:
-        if d['prenom'] == prenom and d['nom'] == nom:
+        if normalize(d['prenom']) == normalize(prenom) and normalize(d['nom']) == normalize(nom):
             folder_path = os.path.join(app.config['UPLOAD_FOLDER'], d['folder'])
             if os.path.exists(folder_path):
-                import shutil
                 shutil.rmtree(folder_path)
         else:
             new_data.append(d)
@@ -309,7 +316,7 @@ def voir_mail(prenom, nom):
     with open(MAIL_LOG, 'r') as f:
         mails = json.load(f)
 
-    mails_personne = [m for m in mails if m['prenom'] == prenom and m['nom'] == nom]
+    mails_personne = [m for m in mails if normalize(m['prenom']) == normalize(prenom) and normalize(m['nom']) == normalize(nom)]
     if not mails_personne:
         return f"Aucun mail trouvé pour {prenom} {nom}"
 
