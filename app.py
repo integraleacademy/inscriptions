@@ -27,7 +27,6 @@ def normalize(s):
     return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
 
 def clean_text(text):
-    """Nettoie les caractères non supportés par fpdf (latin-1)"""
     if not isinstance(text, str):
         text = str(text)
     return unicodedata.normalize('NFKD', text).encode('latin-1', 'ignore').decode('latin-1')
@@ -43,7 +42,6 @@ def save_data(entry):
         json.dump(data, f, indent=2)
 
 def log_mail(entry):
-    """Sauvegarde une trace du mail envoyé"""
     if os.path.exists(MAIL_LOG):
         with open(MAIL_LOG, 'r') as f:
             mails = json.load(f)
@@ -91,7 +89,6 @@ def submit():
             'certificat_medical': files.get('certificat_medical'),
             'permis_conduire': files.get('permis_conduire')
         }
-
         for key, f in a3p_files.items():
             if f and f.filename:
                 renamed = secure_filename(f"{key}_{f.filename}")
@@ -179,23 +176,31 @@ def fiche(prenom, nom):
     return send_file(path, as_attachment=True)
 
 # ------------------------
-# MAILS AVEC STYLE HARMONISÉ + LOGO URL
+# MAILS AVEC STYLE UNIFIÉ + LOGO URL RENDER
 # ------------------------
 
 def mail_template(titre, couleur, contenu, prenom, nom):
-    # ⚠️ Mets ici l’URL complète de ton site Render
     logo_url = "https://inscriptions-akou.onrender.com/static/logo.png"
 
     return f"""
     <html>
       <body style="font-family: Arial, sans-serif; background:#f5f5f5; padding:20px; color:#333; font-size:15px; line-height:1.5;">
         <div style="max-width:600px; margin:auto; background:white; border-radius:10px; padding:25px; box-shadow:0 0 10px rgba(0,0,0,0.08);">
+
+          <!-- Logo + nom -->
           <div style="text-align:center; margin-bottom:15px;">
-            <img src="{logo_url}" alt="Intégrale Academy" style="max-width:180px; height:auto; display:block; margin:auto;">
+            <img src="{logo_url}" alt="Intégrale Academy" style="max-width:100px; height:auto; display:block; margin:auto;">
+            <h2 style="color:#333; margin-top:8px; font-size:18px;">Intégrale Academy</h2>
           </div>
-          <h2 style="color:{couleur}; font-size:20px; text-align:center; margin-bottom:20px;">{titre}</h2>
+
+          <!-- Titre du mail -->
+          <h2 style="color:{couleur}; font-size:20px; margin:20px 0;">{titre}</h2>
+
+          <!-- Corps du mail -->
           <p>Bonjour <b>{prenom} {nom.upper()}</b>,</p>
           {contenu}
+
+          <!-- Signature -->
           <p style="margin-top:30px; font-size:14px;">Cordialement,<br>L’équipe <b>Intégrale Academy</b></p>
         </div>
       </body>
@@ -218,8 +223,8 @@ def send_confirmation_email(data):
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
             server.sendmail(msg['From'], [msg['To']], msg.as_string())
-        log_mail({"prenom": data['prenom'],"nom": data['nom'],"to": data['email'],
-                  "subject": msg['Subject'],"content": html_email_content,
+        log_mail({"prenom": data['prenom'], "nom": data['nom'], "to": data['email'],
+                  "subject": msg['Subject'], "content": html_email_content,
                   "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
     except Exception as e:
         print(f"❌ Erreur envoi mail confirmation: {str(e)}")
@@ -246,8 +251,8 @@ def send_non_conforme_email(data):
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
             server.sendmail(msg['From'], [msg['To']], msg.as_string())
-        log_mail({"prenom": data['prenom'],"nom": data['nom'],"to": data['email'],
-                  "subject": msg['Subject'],"content": html_email_content,
+        log_mail({"prenom": data['prenom'], "nom": data['nom'], "to": data['email'],
+                  "subject": msg['Subject'], "content": html_email_content,
                   "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
     except Exception as e:
         print(f"❌ Erreur envoi mail NON CONFORME: {str(e)}")
@@ -269,13 +274,11 @@ def send_conforme_email(data):
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
             server.sendmail(msg['From'], [msg['To']], msg.as_string())
-        log_mail({"prenom": data['prenom'],"nom": data['nom'],"to": data['email'],
-                  "subject": msg['Subject'],"content": html_email_content,
+        log_mail({"prenom": data['prenom'], "nom": data['nom'], "to": data['email'],
+                  "subject": msg['Subject'], "content": html_email_content,
                   "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
     except Exception as e:
         print(f"❌ Erreur envoi mail CONFORME: {str(e)}")
-
-# ------------------------
 
 @app.route('/update/<prenom>/<nom>', methods=['POST'])
 def update(prenom, nom):
@@ -338,7 +341,7 @@ def voir_mail(prenom, nom):
     if not os.path.exists(MAIL_LOG):
         return "Aucun mail envoyé"
 
-    with open(MAIL_LOG, 'r') as f:
+    with open(MAIL_LOG) as f:
         mails = json.load(f)
 
     mails_personne = [m for m in mails if normalize(m['prenom']) == normalize(prenom) and normalize(m['nom']) == normalize(nom)]
