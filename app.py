@@ -184,7 +184,7 @@ def fiche(prenom, nom):
 
 def mail_template(titre, couleur, contenu, prenom, nom):
     # ⚠️ Mets ici l’URL complète de ton site Render
-    logo_url = "https://ton-site.onrender.com/static/logo.png"
+    logo_url = "https://inscriptions-akou.onrender.com/static/logo.png"
 
     return f"""
     <html>
