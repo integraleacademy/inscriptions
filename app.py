@@ -178,39 +178,46 @@ def fiche(prenom, nom):
     pdf.output(path)
     return send_file(path, as_attachment=True)
 
+# ------------------------
+# MAILS MODIFIÉS
+# ------------------------
+
 def send_confirmation_email(data):
     try:
-        html_email_content = """
+        html_email_content = f"""
         <html>
-          <body>
-            <p>Bonjour {prenom},</p>
-            <p>Nous vous confirmons la bonne réception de votre dossier. L’équipe d’Intégrale Academy vous remercie.</p>
-            <p>Nous restons disponibles pour toute question complémentaire.</p>
-            <br>
-            <p>Cordialement,<br>L’équipe Intégrale Academy</p>
+          <body style="font-family: Arial, sans-serif; background:#f9f9f9; padding:20px;">
+            <div style="max-width:600px; margin:auto; background:white; border-radius:10px; padding:20px; box-shadow:0 0 10px rgba(0,0,0,0.1);">
+              <div style="text-align:center; margin-bottom:20px;">
+                <img src="https://integraleacademy.com/static/logo.png" style="max-height:80px;">
+                <h2 style="margin-top:10px; color:#333;">Intégrale Academy</h2>
+              </div>
+              <h2 style="color:green;">✅ Demande traitée</h2>
+              <p>Bonjour <b>{data['prenom']} {data['nom'].upper()}</b>,</p>
+              <p>✅ Votre demande a été traitée.</p>
+              <div style="border:1px solid #ddd; border-radius:8px; padding:15px; margin:20px 0; background:#fafafa;">
+                <p>📌 <b>Motif :</b> Attestation</p>
+                <p>📄 <b>Détails :</b> Compléter la demande de réservation pour le salon de l'étudiant de Saint-Raphaël :
+                  <a href="https://docs.google.com/forms/d/e/1FAIpQLScGdpaQh7-r4dvw7QiAtsqUKGzm1digCEdhKxkfKCcqYWBWsg/viewform" target="_blank">Lien Google Forms</a>
+                </p>
+                <p>💬 <b>Commentaire :</b> Aucun commentaire ajouté.</p>
+              </div>
+              <p style="margin-top:30px;">Cordialement,<br>L’équipe <b>Intégrale Academy</b></p>
+            </div>
           </body>
         </html>
         """
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = "Confirmation de dépôt de dossier – Intégrale Academy"
+        msg['Subject'] = "✅ Votre demande a été traitée – Intégrale Academy"
         msg['From'] = os.environ.get("MAIL_USER")
         msg['To'] = data['email']
-        html = f"""{html_email_content.replace('{prenom}', data['prenom'])}"""
-        msg.attach(MIMEText(html, 'html'))
-
+        msg.attach(MIMEText(html_email_content, 'html'))
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
             server.sendmail(msg['From'], [msg['To']], msg.as_string())
-
-        log_mail({
-            "prenom": data['prenom'],
-            "nom": data['nom'],
-            "to": data['email'],
-            "subject": msg['Subject'],
-            "content": html,
-            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        })
-
+        log_mail({"prenom": data['prenom'],"nom": data['nom'],"to": data['email'],
+                  "subject": msg['Subject'],"content": html_email_content,
+                  "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
     except Exception as e:
         print(f"❌ Erreur envoi mail confirmation: {str(e)}")
 
@@ -218,17 +225,22 @@ def send_non_conforme_email(data):
     try:
         html_email_content = f"""
         <html>
-          <body style="font-family: Arial, sans-serif; color:#333;">
-            <div style="border:2px solid #e74c3c; padding:15px; border-radius:10px;">
+          <body style="font-family: Arial, sans-serif; background:#f9f9f9; padding:20px;">
+            <div style="max-width:600px; margin:auto; background:white; border-radius:10px; padding:20px; box-shadow:0 0 10px rgba(0,0,0,0.1);">
+              <div style="text-align:center; margin-bottom:20px;">
+                <img src="https://integraleacademy.com/static/logo.png" style="max-height:80px;">
+                <h2 style="margin-top:10px; color:#333;">Intégrale Academy</h2>
+              </div>
               <h2 style="color:#e74c3c;">❌ Documents non conformes</h2>
-              <p>Bonjour {data['prenom']},</p>
-              <p>Après vérification, les documents que vous avez transmis sont <b style="color:#e74c3c;">non conformes</b>.</p>
-              <p><b>📝 Commentaire :</b> {data.get('commentaire', 'Aucun')}</p>
-              <p>👉 Nous vous remercions de bien vouloir déposer vos documents conformes en cliquant sur le lien ci-dessous :</p>
-              <p><a href="https://inscriptions-akou.onrender.com/" style="background:#27ae60;color:white;padding:10px 15px;border-radius:5px;text-decoration:none;">🔗 Refaire ma demande</a></p>
-              
-              <br>
-              <p>📩 L’équipe <b>Intégrale Academy</b> reste à votre disposition.</p>
+              <p>Bonjour <b>{data['prenom']} {data['nom'].upper()}</b>,</p>
+              <p>❌ Votre demande nécessite des corrections car certains documents ne sont pas conformes.</p>
+              <div style="border:1px solid #ddd; border-radius:8px; padding:15px; margin:20px 0; background:#fff5f5;">
+                <p>📌 <b>Motif :</b> Non conformité des documents</p>
+                <p>📄 <b>Détails :</b> Merci de bien vouloir déposer vos documents conformes via notre plateforme :</p>
+                <p><a href="https://inscriptions-akou.onrender.com/" target="_blank" style="background:#e74c3c;color:white;padding:10px 15px;border-radius:6px;text-decoration:none;">🔗 Refaire ma demande</a></p>
+                <p>💬 <b>Commentaire :</b> {data.get('commentaire', 'Aucun commentaire ajouté')}</p>
+              </div>
+              <p style="margin-top:30px;">Cordialement,<br>L’équipe <b>Intégrale Academy</b></p>
             </div>
           </body>
         </html>
@@ -238,22 +250,53 @@ def send_non_conforme_email(data):
         msg['From'] = os.environ.get("MAIL_USER")
         msg['To'] = data['email']
         msg.attach(MIMEText(html_email_content, 'html'))
-
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
             server.sendmail(msg['From'], [msg['To']], msg.as_string())
-
-        log_mail({
-            "prenom": data['prenom'],
-            "nom": data['nom'],
-            "to": data['email'],
-            "subject": msg['Subject'],
-            "content": html_email_content,
-            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        })
-
+        log_mail({"prenom": data['prenom'],"nom": data['nom'],"to": data['email'],
+                  "subject": msg['Subject'],"content": html_email_content,
+                  "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
     except Exception as e:
         print(f"❌ Erreur envoi mail NON CONFORME: {str(e)}")
+
+def send_conforme_email(data):
+    try:
+        html_email_content = f"""
+        <html>
+          <body style="font-family: Arial, sans-serif; background:#f9f9f9; padding:20px;">
+            <div style="max-width:600px; margin:auto; background:white; border-radius:10px; padding:20px; box-shadow:0 0 10px rgba(0,0,0,0.1);">
+              <div style="text-align:center; margin-bottom:20px;">
+                <img src="https://integraleacademy.com/static/logo.png" style="max-height:80px;">
+                <h2 style="margin-top:10px; color:#333;">Intégrale Academy</h2>
+              </div>
+              <h2 style="color:#27ae60;">✔️ Dossier conforme</h2>
+              <p>Bonjour <b>{data['prenom']} {data['nom'].upper()}</b>,</p>
+              <p>✔️ Nous avons vérifié vos documents et votre dossier est <b style="color:#27ae60;">conforme</b>.</p>
+              <div style="border:1px solid #ddd; border-radius:8px; padding:15px; margin:20px 0; background:#f0fff4;">
+                <p>📌 <b>Motif :</b> Validation de votre dossier</p>
+                <p>📄 <b>Détails :</b> Votre dossier est validé et conforme aux exigences réglementaires.</p>
+                <p>💬 <b>Commentaire :</b> {data.get('commentaire', 'Aucun commentaire ajouté')}</p>
+              </div>
+              <p style="margin-top:30px;">Cordialement,<br>L’équipe <b>Intégrale Academy</b></p>
+            </div>
+          </body>
+        </html>
+        """
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = "✔️ Votre dossier est conforme – Intégrale Academy"
+        msg['From'] = os.environ.get("MAIL_USER")
+        msg['To'] = data['email']
+        msg.attach(MIMEText(html_email_content, 'html'))
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(os.environ.get("MAIL_USER"), os.environ.get("MAIL_PASS"))
+            server.sendmail(msg['From'], [msg['To']], msg.as_string())
+        log_mail({"prenom": data['prenom'],"nom": data['nom'],"to": data['email'],
+                  "subject": msg['Subject'],"content": html_email_content,
+                  "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+    except Exception as e:
+        print(f"❌ Erreur envoi mail CONFORME: {str(e)}")
+
+# ------------------------
 
 @app.route('/update/<prenom>/<nom>', methods=['POST'])
 def update(prenom, nom):
@@ -277,6 +320,10 @@ def update(prenom, nom):
             if status_value == "NON CONFORME":
                 send_non_conforme_email(d)
                 flash(f"📧 Demande de mise en conformité envoyée à {d['email']}", "success")
+
+            elif status_value == "CONFORME":
+                send_conforme_email(d)
+                flash(f"📧 Confirmation de dossier conforme envoyée à {d['email']}", "success")
 
     with open(DATA_FILE, 'w') as f:
         json.dump(data, f, indent=2)
