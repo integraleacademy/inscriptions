@@ -179,22 +179,24 @@ def fiche(prenom, nom):
     return send_file(path, as_attachment=True)
 
 # ------------------------
-# MAILS AVEC STYLE + TEXTES ORIGINAUX
+# MAILS AVEC STYLE HARMONISÉ + LOGO URL
 # ------------------------
 
 def mail_template(titre, couleur, contenu, prenom, nom):
+    # ⚠️ Mets ici l’URL complète de ton site Render
+    logo_url = "https://ton-site.onrender.com/static/logo.png"
+
     return f"""
     <html>
-      <body style="font-family: Arial, sans-serif; background:#f9f9f9; padding:20px;">
-        <div style="max-width:600px; margin:auto; background:white; border-radius:10px; padding:20px; box-shadow:0 0 10px rgba(0,0,0,0.1);">
-          <div style="text-align:center; margin-bottom:20px;">
-            <img src="https://inscriptions-akou.onrender.com/static/logo.png" alt="Intégrale Academy" style="max-height:80px;">
-            <h2 style="margin-top:10px; color:#333;">Intégrale Academy</h2>
+      <body style="font-family: Arial, sans-serif; background:#f5f5f5; padding:20px; color:#333; font-size:15px; line-height:1.5;">
+        <div style="max-width:600px; margin:auto; background:white; border-radius:10px; padding:25px; box-shadow:0 0 10px rgba(0,0,0,0.08);">
+          <div style="text-align:center; margin-bottom:15px;">
+            <img src="{logo_url}" alt="Intégrale Academy" style="max-width:180px; height:auto; display:block; margin:auto;">
           </div>
-          <h2 style="color:{couleur};">{titre}</h2>
+          <h2 style="color:{couleur}; font-size:20px; text-align:center; margin-bottom:20px;">{titre}</h2>
           <p>Bonjour <b>{prenom} {nom.upper()}</b>,</p>
           {contenu}
-          <p style="margin-top:30px;">Cordialement,<br>L’équipe <b>Intégrale Academy</b></p>
+          <p style="margin-top:30px; font-size:14px;">Cordialement,<br>L’équipe <b>Intégrale Academy</b></p>
         </div>
       </body>
     </html>
@@ -203,8 +205,9 @@ def mail_template(titre, couleur, contenu, prenom, nom):
 def send_confirmation_email(data):
     try:
         contenu = """
-        <p>Nous vous confirmons la bonne réception de votre dossier ✅. Nous allons procéder à une vérification des documents transmis.</p>
-        <p>L’équipe d’Intégrale Academy vous remercie et reste disponible pour toute question complémentaire.</p>
+        <p>📩 Nous vous confirmons la bonne réception de votre dossier ✅.<br>
+        Nous allons procéder à une vérification des documents transmis.</p>
+        <p>L’équipe d’Intégrale Academy vous remercie 🙏 et reste disponible pour toute question complémentaire.</p>
         """
         html_email_content = mail_template("📩 Confirmation de dépôt", "green", contenu, data['prenom'], data['nom'])
         msg = MIMEMultipart('alternative')
@@ -225,13 +228,11 @@ def send_non_conforme_email(data):
     try:
         contenu = f"""
         <p>❌ Après vérification par nos services, les documents transmis pour votre formation ne sont pas conformes.</p>
-
-        <div style="border:2px solid #f1c40f; background:#fff9c4; padding:12px; border-radius:8px; margin:15px 0;">
+        <div style="border:2px solid #f1c40f; background:#fff9c4; padding:12px; border-radius:8px; margin:15px 0; font-size:14px;">
             <b>⚠️ Détail des non conformités :</b><br>
             {data.get('commentaire','Aucun')}
         </div>
-
-        <p>👉 Nous vous remercions de bien vouloir redéposer votre dossier en cliquant sur le lien ci-dessous :</p>
+        <p>👉 Merci de bien vouloir redéposer votre dossier en cliquant sur le lien ci-dessous :</p>
         <p><a href="https://inscriptions-akou.onrender.com/" target="_blank"
               style="background:#e74c3c;color:white;padding:10px 15px;border-radius:6px;text-decoration:none;">
               🔗 Redéposer mon dossier</a></p>
@@ -254,8 +255,10 @@ def send_non_conforme_email(data):
 def send_conforme_email(data):
     try:
         contenu = f"""
-        <p>✔️ Après vérification par nos services, nous vous informons que les documents transmis pour votre formation sont <b style="color:#27ae60;">conformes</b>.</p>
-        <p><b>Commentaire :</b> {data.get('commentaire','Aucun')}</p>
+        <p>✔️ Après vérification par nos services, nous vous informons que les documents transmis pour votre formation sont
+        <b style="color:#27ae60;">conformes</b>.</p>
+        <p><b>💬 Commentaire :</b> {data.get('commentaire','Aucun')}</p>
+        <p>👉 Vous pouvez maintenant poursuivre sereinement votre parcours avec Intégrale Academy.</p>
         """
         html_email_content = mail_template("✔️ Dossier conforme", "#27ae60", contenu, data['prenom'], data['nom'])
         msg = MIMEMultipart('alternative')
@@ -296,7 +299,6 @@ def update(prenom, nom):
             if status_value == "NON CONFORME":
                 send_non_conforme_email(d)
                 flash(f"📧 Mail NON CONFORME envoyé à {d['email']}", "success")
-
             elif status_value == "CONFORME":
                 send_conforme_email(d)
                 flash(f"📧 Mail CONFORME envoyé à {d['email']}", "success")
