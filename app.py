@@ -203,7 +203,7 @@ def mail_template(titre, couleur, contenu, prenom, nom):
 def send_confirmation_email(data):
     try:
         contenu = """
-        <p>Nous vous confirmons la bonne réception de votre dossier. ✅</p>
+        <p>Nous vous confirmons la bonne réception de votre dossier ✅. Nous allons procéder à une vérification des documents transmis.</p>
         <p>L’équipe d’Intégrale Academy vous remercie et reste disponible pour toute question complémentaire.</p>
         """
         html_email_content = mail_template("📩 Confirmation de dépôt", "green", contenu, data['prenom'], data['nom'])
@@ -224,17 +224,17 @@ def send_confirmation_email(data):
 def send_non_conforme_email(data):
     try:
         contenu = f"""
-        <p>❌ Après vérification, vos documents ne sont pas conformes.</p>
+        <p>❌ Après vérification par nos services, les documents transmis pour votre formation ne sont pas conformes.</p>
 
         <div style="border:2px solid #f1c40f; background:#fff9c4; padding:12px; border-radius:8px; margin:15px 0;">
             <b>⚠️ Détail des non conformités :</b><br>
             {data.get('commentaire','Aucun')}
         </div>
 
-        <p>👉 Merci de bien vouloir déposer vos documents conformes en cliquant sur le lien ci-dessous :</p>
+        <p>👉 Nous vous remercions de bien vouloir redéposer votre dossier en cliquant sur le lien ci-dessous :</p>
         <p><a href="https://inscriptions-akou.onrender.com/" target="_blank"
               style="background:#e74c3c;color:white;padding:10px 15px;border-radius:6px;text-decoration:none;">
-              🔗 Refaire ma demande</a></p>
+              🔗 Redéposer mon dossier</a></p>
         """
         html_email_content = mail_template("❌ Documents non conformes", "#e74c3c", contenu, data['prenom'], data['nom'])
         msg = MIMEMultipart('alternative')
@@ -254,7 +254,7 @@ def send_non_conforme_email(data):
 def send_conforme_email(data):
     try:
         contenu = f"""
-        <p>✔️ Nous avons vérifié vos documents et votre dossier est <b style="color:#27ae60;">conforme</b>.</p>
+        <p>✔️ Après vérification par nos services, nous vous informons que les documents transmis pour votre formation sont <b style="color:#27ae60;">conformes</b>.</p>
         <p><b>Commentaire :</b> {data.get('commentaire','Aucun')}</p>
         """
         html_email_content = mail_template("✔️ Dossier conforme", "#27ae60", contenu, data['prenom'], data['nom'])
