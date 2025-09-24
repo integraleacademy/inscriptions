@@ -179,36 +179,36 @@ def fiche(prenom, nom):
     return send_file(path, as_attachment=True)
 
 # ------------------------
-# MAILS MODIFIÉS
+# MAILS AVEC STYLE + TEXTES ORIGINAUX
 # ------------------------
+
+def mail_template(titre, couleur, contenu, prenom, nom):
+    return f"""
+    <html>
+      <body style="font-family: Arial, sans-serif; background:#f9f9f9; padding:20px;">
+        <div style="max-width:600px; margin:auto; background:white; border-radius:10px; padding:20px; box-shadow:0 0 10px rgba(0,0,0,0.1);">
+          <div style="text-align:center; margin-bottom:20px;">
+            <img src="https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME','localhost')}/static/logo.png" alt="Intégrale Academy" style="max-height:80px;">
+            <h2 style="margin-top:10px; color:#333;">Intégrale Academy</h2>
+          </div>
+          <h2 style="color:{couleur};">{titre}</h2>
+          <p>Bonjour <b>{prenom} {nom.upper()}</b>,</p>
+          {contenu}
+          <p style="margin-top:30px;">Cordialement,<br>L’équipe <b>Intégrale Academy</b></p>
+        </div>
+      </body>
+    </html>
+    """
 
 def send_confirmation_email(data):
     try:
-        html_email_content = f"""
-        <html>
-          <body style="font-family: Arial, sans-serif; background:#f9f9f9; padding:20px;">
-            <div style="max-width:600px; margin:auto; background:white; border-radius:10px; padding:20px; box-shadow:0 0 10px rgba(0,0,0,0.1);">
-              <div style="text-align:center; margin-bottom:20px;">
-                <img src="https://integraleacademy.com/static/logo.png" style="max-height:80px;">
-                <h2 style="margin-top:10px; color:#333;">Intégrale Academy</h2>
-              </div>
-              <h2 style="color:green;">✅ Demande traitée</h2>
-              <p>Bonjour <b>{data['prenom']} {data['nom'].upper()}</b>,</p>
-              <p>✅ Votre demande a été traitée.</p>
-              <div style="border:1px solid #ddd; border-radius:8px; padding:15px; margin:20px 0; background:#fafafa;">
-                <p>📌 <b>Motif :</b> Attestation</p>
-                <p>📄 <b>Détails :</b> Compléter la demande de réservation pour le salon de l'étudiant de Saint-Raphaël :
-                  <a href="https://docs.google.com/forms/d/e/1FAIpQLScGdpaQh7-r4dvw7QiAtsqUKGzm1digCEdhKxkfKCcqYWBWsg/viewform" target="_blank">Lien Google Forms</a>
-                </p>
-                <p>💬 <b>Commentaire :</b> Aucun commentaire ajouté.</p>
-              </div>
-              <p style="margin-top:30px;">Cordialement,<br>L’équipe <b>Intégrale Academy</b></p>
-            </div>
-          </body>
-        </html>
+        contenu = """
+        <p>Nous vous confirmons la bonne réception de votre dossier. ✅</p>
+        <p>L’équipe d’Intégrale Academy vous remercie et reste disponible pour toute question complémentaire.</p>
         """
+        html_email_content = mail_template("📩 Confirmation de dépôt", "green", contenu, data['prenom'], data['nom'])
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = "✅ Votre demande a été traitée – Intégrale Academy"
+        msg['Subject'] = "📩 Confirmation de dépôt – Intégrale Academy"
         msg['From'] = os.environ.get("MAIL_USER")
         msg['To'] = data['email']
         msg.attach(MIMEText(html_email_content, 'html'))
@@ -223,28 +223,13 @@ def send_confirmation_email(data):
 
 def send_non_conforme_email(data):
     try:
-        html_email_content = f"""
-        <html>
-          <body style="font-family: Arial, sans-serif; background:#f9f9f9; padding:20px;">
-            <div style="max-width:600px; margin:auto; background:white; border-radius:10px; padding:20px; box-shadow:0 0 10px rgba(0,0,0,0.1);">
-              <div style="text-align:center; margin-bottom:20px;">
-                <img src="https://integraleacademy.com/static/logo.png" style="max-height:80px;">
-                <h2 style="margin-top:10px; color:#333;">Intégrale Academy</h2>
-              </div>
-              <h2 style="color:#e74c3c;">❌ Documents non conformes</h2>
-              <p>Bonjour <b>{data['prenom']} {data['nom'].upper()}</b>,</p>
-              <p>❌ Votre demande nécessite des corrections car certains documents ne sont pas conformes.</p>
-              <div style="border:1px solid #ddd; border-radius:8px; padding:15px; margin:20px 0; background:#fff5f5;">
-                <p>📌 <b>Motif :</b> Non conformité des documents</p>
-                <p>📄 <b>Détails :</b> Merci de bien vouloir déposer vos documents conformes via notre plateforme :</p>
-                <p><a href="https://inscriptions-akou.onrender.com/" target="_blank" style="background:#e74c3c;color:white;padding:10px 15px;border-radius:6px;text-decoration:none;">🔗 Refaire ma demande</a></p>
-                <p>💬 <b>Commentaire :</b> {data.get('commentaire', 'Aucun commentaire ajouté')}</p>
-              </div>
-              <p style="margin-top:30px;">Cordialement,<br>L’équipe <b>Intégrale Academy</b></p>
-            </div>
-          </body>
-        </html>
+        contenu = f"""
+        <p>❌ Après vérification, vos documents ne sont pas conformes.</p>
+        <p><b>Commentaire :</b> {data.get('commentaire','Aucun')}</p>
+        <p>👉 Merci de bien vouloir déposer vos documents conformes en cliquant sur le lien ci-dessous :</p>
+        <p><a href="https://inscriptions-akou.onrender.com/" style="background:#e74c3c;color:white;padding:10px 15px;border-radius:6px;text-decoration:none;">🔗 Refaire ma demande</a></p>
         """
+        html_email_content = mail_template("❌ Documents non conformes", "#e74c3c", contenu, data['prenom'], data['nom'])
         msg = MIMEMultipart('alternative')
         msg['Subject'] = "❌ Documents non conformes – Intégrale Academy"
         msg['From'] = os.environ.get("MAIL_USER")
@@ -261,27 +246,11 @@ def send_non_conforme_email(data):
 
 def send_conforme_email(data):
     try:
-        html_email_content = f"""
-        <html>
-          <body style="font-family: Arial, sans-serif; background:#f9f9f9; padding:20px;">
-            <div style="max-width:600px; margin:auto; background:white; border-radius:10px; padding:20px; box-shadow:0 0 10px rgba(0,0,0,0.1);">
-              <div style="text-align:center; margin-bottom:20px;">
-                <img src="https://integraleacademy.com/static/logo.png" style="max-height:80px;">
-                <h2 style="margin-top:10px; color:#333;">Intégrale Academy</h2>
-              </div>
-              <h2 style="color:#27ae60;">✔️ Dossier conforme</h2>
-              <p>Bonjour <b>{data['prenom']} {data['nom'].upper()}</b>,</p>
-              <p>✔️ Nous avons vérifié vos documents et votre dossier est <b style="color:#27ae60;">conforme</b>.</p>
-              <div style="border:1px solid #ddd; border-radius:8px; padding:15px; margin:20px 0; background:#f0fff4;">
-                <p>📌 <b>Motif :</b> Validation de votre dossier</p>
-                <p>📄 <b>Détails :</b> Votre dossier est validé et conforme aux exigences réglementaires.</p>
-                <p>💬 <b>Commentaire :</b> {data.get('commentaire', 'Aucun commentaire ajouté')}</p>
-              </div>
-              <p style="margin-top:30px;">Cordialement,<br>L’équipe <b>Intégrale Academy</b></p>
-            </div>
-          </body>
-        </html>
+        contenu = f"""
+        <p>✔️ Nous avons vérifié vos documents et votre dossier est <b style="color:#27ae60;">conforme</b>.</p>
+        <p><b>Commentaire :</b> {data.get('commentaire','Aucun')}</p>
         """
+        html_email_content = mail_template("✔️ Dossier conforme", "#27ae60", contenu, data['prenom'], data['nom'])
         msg = MIMEMultipart('alternative')
         msg['Subject'] = "✔️ Votre dossier est conforme – Intégrale Academy"
         msg['From'] = os.environ.get("MAIL_USER")
@@ -319,11 +288,11 @@ def update(prenom, nom):
 
             if status_value == "NON CONFORME":
                 send_non_conforme_email(d)
-                flash(f"📧 Demande de mise en conformité envoyée à {d['email']}", "success")
+                flash(f"📧 Mail NON CONFORME envoyé à {d['email']}", "success")
 
             elif status_value == "CONFORME":
                 send_conforme_email(d)
-                flash(f"📧 Confirmation de dossier conforme envoyée à {d['email']}", "success")
+                flash(f"📧 Mail CONFORME envoyé à {d['email']}", "success")
 
     with open(DATA_FILE, 'w') as f:
         json.dump(data, f, indent=2)
