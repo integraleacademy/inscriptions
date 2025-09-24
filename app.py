@@ -188,7 +188,7 @@ def mail_template(titre, couleur, contenu, prenom, nom):
       <body style="font-family: Arial, sans-serif; background:#f9f9f9; padding:20px;">
         <div style="max-width:600px; margin:auto; background:white; border-radius:10px; padding:20px; box-shadow:0 0 10px rgba(0,0,0,0.1);">
           <div style="text-align:center; margin-bottom:20px;">
-            <img src="https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME','localhost')}/static/logo.png" alt="Intégrale Academy" style="max-height:80px;">
+            <img src="/static/logo.png" alt="Intégrale Academy" style="max-height:80px;">
             <h2 style="margin-top:10px; color:#333;">Intégrale Academy</h2>
           </div>
           <h2 style="color:{couleur};">{titre}</h2>
@@ -225,9 +225,16 @@ def send_non_conforme_email(data):
     try:
         contenu = f"""
         <p>❌ Après vérification, vos documents ne sont pas conformes.</p>
-        <p><b>Commentaire :</b> {data.get('commentaire','Aucun')}</p>
+
+        <div style="border:2px solid #f1c40f; background:#fff9c4; padding:12px; border-radius:8px; margin:15px 0;">
+            <b>⚠️ Détail des non conformités :</b><br>
+            {data.get('commentaire','Aucun')}
+        </div>
+
         <p>👉 Merci de bien vouloir déposer vos documents conformes en cliquant sur le lien ci-dessous :</p>
-        <p><a href="https://inscriptions-akou.onrender.com/" style="background:#e74c3c;color:white;padding:10px 15px;border-radius:6px;text-decoration:none;">🔗 Refaire ma demande</a></p>
+        <p><a href="https://inscriptions-akou.onrender.com/" target="_blank"
+              style="background:#e74c3c;color:white;padding:10px 15px;border-radius:6px;text-decoration:none;">
+              🔗 Refaire ma demande</a></p>
         """
         html_email_content = mail_template("❌ Documents non conformes", "#e74c3c", contenu, data['prenom'], data['nom'])
         msg = MIMEMultipart('alternative')
