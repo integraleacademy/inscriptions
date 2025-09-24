@@ -263,7 +263,7 @@ def send_conforme_email(data):
         <p>✔️ Après vérification par nos services, nous vous informons que les documents transmis pour votre formation sont
         <b style="color:#27ae60;">conformes</b>.</p>
         <p><b>💬 Commentaire :</b> {data.get('commentaire','Aucun')}</p>
-        <p>👉 Vous pouvez maintenant poursuivre sereinement votre parcours avec Intégrale Academy.</p>
+        <p>👉 N'hésitez pas à nous contacter pour tout complément d'information.</p>
         """
         html_email_content = mail_template("✔️ Dossier conforme", "#27ae60", contenu, data['prenom'], data['nom'])
         msg = MIMEMultipart('alternative')
