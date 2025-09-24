@@ -188,7 +188,7 @@ def mail_template(titre, couleur, contenu, prenom, nom):
       <body style="font-family: Arial, sans-serif; background:#f9f9f9; padding:20px;">
         <div style="max-width:600px; margin:auto; background:white; border-radius:10px; padding:20px; box-shadow:0 0 10px rgba(0,0,0,0.1);">
           <div style="text-align:center; margin-bottom:20px;">
-            <img src="/static/logo.png" alt="Intégrale Academy" style="max-height:80px;">
+            <img src="https://inscriptions-akou.onrender.com/static/logo.png" alt="Intégrale Academy" style="max-height:80px;">
             <h2 style="margin-top:10px; color:#333;">Intégrale Academy</h2>
           </div>
           <h2 style="color:{couleur};">{titre}</h2>
