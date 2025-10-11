@@ -357,11 +357,16 @@ def voir_mail(prenom, nom):
     {dernier_mail['content']}
     """
 
-    @app.route("/data.json")
+
+# -----------------------
+# Route publique pour exposer data.json (avec CORS)
+# -----------------------
+@app.route("/data.json")
 def data_json():
-    """Renvoie le contenu du fichier data.json pour la plateforme des inscriptions (CORS activé)"""
+    """Renvoie le contenu du fichier data.json pour la plateforme inscriptions"""
+    DATA_FILE = '/mnt/data/data.json'  # chemin vers ton fichier des dossiers
     try:
-        with open("/mnt/data/data.json", "r", encoding="utf-8") as f:
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
             contenu = f.read()
         headers = {
             "Content-Type": "application/json",
@@ -372,3 +377,6 @@ def data_json():
         print("Erreur lecture data.json:", e)
         return {"error": "impossible de lire les données"}, 500
 
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
