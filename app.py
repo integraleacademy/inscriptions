@@ -356,3 +356,19 @@ def voir_mail(prenom, nom):
     <hr>
     {dernier_mail['content']}
     """
+
+    @app.route("/data.json")
+def data_json():
+    """Renvoie le contenu du fichier data.json pour la plateforme des inscriptions (CORS activé)"""
+    try:
+        with open("/mnt/data/data.json", "r", encoding="utf-8") as f:
+            contenu = f.read()
+        headers = {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+        }
+        return contenu, 200, headers
+    except Exception as e:
+        print("Erreur lecture data.json:", e)
+        return {"error": "impossible de lire les données"}, 500
+
